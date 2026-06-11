@@ -1,5 +1,6 @@
 import discord
 import json
+import asyncio
 with open('./config.json', 'r', encoding= "utf-8") as f:
     cfg_json = json.load(f)
 
@@ -15,8 +16,8 @@ async def handle_voice_temp(member, before, after):
         await temp_channel.set_permissions(
             member,  
             view_channel = True,
-            manage_channels = False,
-            manage_permissions = False,
+            manage_channels = True,
+            manage_permissions = True,
             manage_webhooks = False,
             create_instant_invite = True,
             connect = True,
@@ -76,7 +77,15 @@ async def handle_voice_temp(member, before, after):
         temp_channel = discord.utils.get(member.guild.voice_channels, name=member.name.capitalize())
         if temp_channel is not None and before.channel == temp_channel:
             await before.channel.delete()
+async def handle_empty_temp_channels(guild):
+    TEMP_CATEGORY_ID = cfg_json["TEMP_CATEGORY_ID"]
+    TEMP_CHANNEL_ID = cfg_json["TEMP_CHANNEL_ID"]
 
+    temp_category = discord.utils.get(guild.categories, id=TEMP_CATEGORY_ID)
+    for channel in temp_category.channels:
+        if isinstance(channel, discord.VoiceChannel) and channel.id != TEMP_CHANNEL_ID and len(channel.members) == 0:
+            await channel.delete()
 
-async def on_voice_state_update_handler(member, before, after):
+async def on_voice_state_update_handler(member, before, after, guild):
     await handle_voice_temp(member, before, after)
+    await handle_empty_temp_channels(guild)

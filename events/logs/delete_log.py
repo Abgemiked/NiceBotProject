@@ -14,11 +14,11 @@ async def handle_message_delete(payload, bot, LOG_CHANNEL_ID, MUSIC_CHANNEL_ID, 
             else:
                 allowed_role_found = True
                 log_channel = bot.get_channel(int(LOG_CHANNEL_ID))
-                await log_channel.send(f'Eine **Teamnachricht** wurde aus dem **{message.channel.name}** gelöscht.')
+                await log_channel.send(f'Eine **Teamnachricht** wurde aus dem Channel **{message.channel.name}** gelöscht.')
                 break
     if not allowed_role_found:
         log_channel = bot.get_channel(LOG_CHANNEL_ID)
-        await log_channel.send(f'Die Nachricht "**{message.content}**" von **{message.author.name}** wurde aus dem **{message.channel.name}** gelöscht.')
+        await log_channel.send(f'Die Nachricht "**{message.content}**" von **{message.author.name}** wurde aus dem Channel **{message.channel.name}** gelöscht.')
 
 
 async def on_raw_message_delete_handler(payload, bot, LOG_CHANNEL_ID, MUSIC_CHANNEL_ID, ALLOWED_ROLE_ID):

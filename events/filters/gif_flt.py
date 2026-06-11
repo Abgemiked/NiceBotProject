@@ -9,7 +9,7 @@ async def handler(message):
         if message.content and not message.content.startswith("https://tenor.com/"):
             await message.delete()
             try:
-                await message.author.send(f"**Deine Nachricht aus <#{gif_channel_id}> wurde gelöscht, bitte sende dort keine Nachrichten. Der Channel ist nur für GIFs gedacht**.")
+                await message.author.send(f"Deine Nachricht aus **<#{gif_channel_id}>** wurde gelöscht, bitte sende dort keine Nachrichten. Der Channel ist nur für **GIFs** gedacht.")
             except discord.Forbidden:
                 print("Fehler beim Senden der DM-Nachricht.")
             return
@@ -19,7 +19,7 @@ async def handler(message):
                 if not attachment.url.startswith("https://tenor.com/"):
                     await message.delete()
                     try:
-                        await message.author.send(f"**Deine Nachricht aus <#{gif_channel_id}> wurde gelöscht, bitte sende dort keine Nachrichten. Der Channel ist nur für GIFs gedacht**.")
+                        await message.author.send(f"Deine Nachricht aus **<#{gif_channel_id}>** wurde gelöscht, bitte sende dort keine Nachrichten. Der Channel ist nur für **GIFs** gedacht.")
                     except discord.Forbidden:
                         print("Fehler beim Senden der DM-Nachricht.")
                     return

@@ -13,7 +13,7 @@ async def handler(message):
         return
     if isinstance(message.author, discord.Member) and not isinstance(message.author, discord.ClientUser):
         try:
-            await message.author.send(f"**Deine Nachricht aus <#{BOT_CHANNEL_ID}> wurde gelöscht, bitte sende dort keine Nachrichten. Der Channel ist nur für /-Befehle gedacht**.")
+            await message.author.send(f"Deine Nachricht aus **<#{BOT_CHANNEL_ID}>** wurde gelöscht, bitte sende dort keine Nachrichten. Der Channel ist nur für **/-Befehle** gedacht.")
             await message.delete()
         except discord.Forbidden:
             print("Fehler beim Senden der DM-Nachricht.")    

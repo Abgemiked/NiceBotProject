@@ -11,7 +11,7 @@ async def update_statistics(cfg_json, guild):
 
     channel = None
     for voice_channel in guild.voice_channels:
-        if voice_channel.name.startswith("Mitglieder"):
+        if voice_channel.name.startswith("Mitglieder:"):
             channel = voice_channel
             break
 
@@ -20,7 +20,7 @@ async def update_statistics(cfg_json, guild):
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
             guild.me: discord.PermissionOverwrite(read_messages=True)
         }
-        new_channel = await guild.create_voice_channel("Mitglieder", overwrites=overwrites)
+        new_channel = await guild.create_voice_channel("Mitglieder:", overwrites=overwrites)
         print(f"Created new channel: {new_channel.name}")
         channel = new_channel
         await channel.set_permissions(

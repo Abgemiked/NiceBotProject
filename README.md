@@ -41,6 +41,20 @@ The channel is only for the word "oof"." (An example of the "oof channel")
 `
 Some of the commands needs one or more specific value to use it
 `
+## Setup
+
+```
+python -m venv .venv
+.venv/Scripts/pip install -r requirements.txt   # Windows
+cp config.example.json config.json              # Werte eintragen
+python main.py
+```
+
+Konfiguration: Umgebungsvariablen (`NICEBOT_<KEY>` oder `<KEY>`, z.B. `NICEBOT_TOKEN`)
+überschreiben die Werte aus `config.json`. Eine `.env`-Datei wird automatisch geladen
+(python-dotenv). Der Pfad zur Level-Datenbank ist über `DB_PATH` konfigurierbar
+(Default: `./level_system.db`), der Pfad zur Config über `CONFIG_PATH`.
+
 ## Support
 
 This bot is not distributed, so support is available rather sporadically. 

@@ -1,8 +1,10 @@
 import discord
-import json
+
+from config import load_config
+
+
 async def update_statistics(cfg_json, guild):
-    with open('config.json') as config_file:
-        data = json.load(config_file) 
+    data = load_config()
     total_members = guild.member_count
     role_id = data['IGNORED_ROLE_ID']
     role = guild.get_role(role_id)
@@ -53,11 +55,5 @@ async def update_statistics(cfg_json, guild):
             use_application_commands = False,
             manage_events = False
         )
-    else:
-        print(f"Channel already exists: {channel.name}")
-
-    print("Total Members:", total_members)
-    print("Role Members:", role_members)
-    print("Members Without Role:", members_without_role)
 
     await channel.edit(name=f"Mitglieder: {members_without_role}")

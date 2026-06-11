@@ -1,9 +1,10 @@
 import discord
-import json
+
+from config import load_config
+
 
 async def handler(message):
-    with open('./config.json', 'r', encoding="utf-8") as f:
-        data = json.load(f)
+    data = load_config()
     spam_channel_id = data['SPAM_CHANNEL_ID']
     keyword = data['SPAM_KEYWORD']
     if message.channel.id == spam_channel_id:

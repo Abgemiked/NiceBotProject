@@ -1,6 +1,8 @@
 import discord
 async def handle_member_remove(member, bot, LEAVE_CHANNEL_ID):
     log_channel = bot.get_channel(LEAVE_CHANNEL_ID)
+    if log_channel is None:
+        return
     await log_channel.send(f'**{member.display_name}** hat den Server verlassen.')
 
 

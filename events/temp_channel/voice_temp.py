@@ -1,12 +1,11 @@
 import discord
-import json
-import asyncio
-with open('./config.json', 'r', encoding= "utf-8") as f:
-    cfg_json = json.load(f)
+
+from config import load_config
+
 
 async def handle_voice_temp(member, before, after):
+    cfg_json = load_config()
     TEMP_CHANNEL_ID = cfg_json["TEMP_CHANNEL_ID"]
-    temp_channel = member.guild.get_channel(TEMP_CHANNEL_ID)
     if after.channel is not None and after.channel.id == TEMP_CHANNEL_ID:
         guild = member.guild
         channel_name = member.name.capitalize()
@@ -78,10 +77,13 @@ async def handle_voice_temp(member, before, after):
         if temp_channel is not None and before.channel == temp_channel:
             await before.channel.delete()
 async def handle_empty_temp_channels(guild):
+    cfg_json = load_config()
     TEMP_CATEGORY_ID = cfg_json["TEMP_CATEGORY_ID"]
     TEMP_CHANNEL_ID = cfg_json["TEMP_CHANNEL_ID"]
 
     temp_category = discord.utils.get(guild.categories, id=TEMP_CATEGORY_ID)
+    if temp_category is None:
+        return
     for channel in temp_category.channels:
         if isinstance(channel, discord.VoiceChannel) and channel.id != TEMP_CHANNEL_ID and len(channel.members) == 0:
             await channel.delete()

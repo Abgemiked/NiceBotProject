@@ -17,6 +17,10 @@ async def handler(cfg_json, interaction, ort):
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(complete_url) as response:
+                if response.status != 200:
+                    print(f"Weatherbit-API-Fehler: HTTP {response.status} — {await response.text()}")
+                    await interaction.edit_original_response(content="Der Wetterdienst ist gerade nicht verfügbar (API-Fehler).")
+                    return
                 data = await response.json()
     except aiohttp.ClientError:
         await interaction.edit_original_response(content="Der Wetterdienst ist gerade nicht erreichbar.")

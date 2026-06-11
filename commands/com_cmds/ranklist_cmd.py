@@ -34,7 +34,7 @@ async def _resolve_name(bot, guild, db, user_id, stored_username):
         db.execute('UPDATE users SET username = ? WHERE user_id = ?', (fetched.name, user_id))
         db.commit()
         return f'{fetched.name}{GONE_SUFFIX}'
-    except discord.HTTPException:
+    except (discord.HTTPException, OSError):
         return f'Unbekannt{GONE_SUFFIX}'
 
 

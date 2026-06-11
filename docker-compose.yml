@@ -1,0 +1,23 @@
+services:
+  nicebot:
+    build: .
+    image: nicebot:latest
+    container_name: nicebot
+    restart: unless-stopped
+    environment:
+      # SQLite-Leveldatenbank im Volume
+      - DB_PATH=/app/data/level_system.db
+      # config.json beschreibbar gemountet (/einstellungen speichert dorthin)
+      - CONFIG_PATH=/app/config/config.json
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+# Kein Port-Mapping, kein npm-web-Netz: reiner Outbound-Bot (Discord-Gateway),
+# kein eingehender HTTP-Traffic noetig.

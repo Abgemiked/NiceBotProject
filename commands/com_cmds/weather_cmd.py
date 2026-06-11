@@ -93,7 +93,7 @@ async def handler(interaction, ort):
     try:
         async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT) as session:
             location = await fetch_geocoding(session, city_name)
-            if location is None:
+            if location is None or "latitude" not in location or "longitude" not in location:
                 await interaction.edit_original_response(content="Ortschaft nicht gefunden.")
                 return
             forecast = await fetch_forecast(session, location["latitude"], location["longitude"])

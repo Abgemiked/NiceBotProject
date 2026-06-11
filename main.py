@@ -113,6 +113,9 @@ async def on_message(message):
     db = get_connection()
     cursor = db.cursor()
     user_id = message.author.id
+    # Global eindeutiger Discord-Name (kein Server-Nickname): bleibt auch
+    # nach einem Server-Austritt aussagekräftig für die Rangliste.
+    username = message.author.name
     cursor.execute('SELECT exp, level FROM users WHERE user_id = ?', (user_id,))
     result = cursor.fetchone()
 
@@ -127,9 +130,9 @@ async def on_message(message):
             exp = 0
             if bot_channel:
                 await bot_channel.send(f'Glückwunsch, {message.author.mention}! Du hast Level {level} erreicht!')
-        cursor.execute('UPDATE users SET exp = ?, level = ? WHERE user_id = ?', (exp, level, user_id))
+        cursor.execute('UPDATE users SET exp = ?, level = ?, username = ? WHERE user_id = ?', (exp, level, username, user_id))
     else:
-        cursor.execute('INSERT INTO users (user_id) VALUES (?)', (user_id,))
+        cursor.execute('INSERT INTO users (user_id, username) VALUES (?, ?)', (user_id, username))
     db.commit()
 
 

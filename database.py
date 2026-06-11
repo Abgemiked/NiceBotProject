@@ -20,11 +20,24 @@ def get_connection():
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
                 exp INTEGER DEFAULT 0,
-                level INTEGER DEFAULT 1
+                level INTEGER DEFAULT 1,
+                username TEXT
             )
         ''')
+        _migrate_schema(_connection)
         _connection.commit()
     return _connection
+
+
+def _migrate_schema(connection):
+    """Idempotente Schema-Migrationen für Bestands-Datenbanken.
+
+    Läuft bei jedem Start automatisch mit: fehlende Spalten werden per
+    ALTER TABLE ergänzt, vorhandene Daten bleiben unangetastet.
+    """
+    columns = {row[1] for row in connection.execute('PRAGMA table_info(users)')}
+    if 'username' not in columns:
+        connection.execute('ALTER TABLE users ADD COLUMN username TEXT')
 
 
 def calculate_exp(level):

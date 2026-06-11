@@ -10,8 +10,8 @@ async def handler(interaction: discord.Interaction, rang_user_give: discord.Memb
     cursor.execute('SELECT exp, level FROM users WHERE user_id = ?', (rang_user_give.id,))
     result = cursor.fetchone()
     if result:
-        cursor.execute('UPDATE users SET level = ? WHERE user_id = ?', (lvl, rang_user_give.id))
+        cursor.execute('UPDATE users SET level = ?, username = ? WHERE user_id = ?', (lvl, rang_user_give.name, rang_user_give.id))
     else:
-        cursor.execute('INSERT INTO users (user_id, exp, level) VALUES (?, ?, ?)', (rang_user_give.id, 0, lvl))
+        cursor.execute('INSERT INTO users (user_id, exp, level, username) VALUES (?, ?, ?, ?)', (rang_user_give.id, 0, lvl, rang_user_give.name))
     db.commit()
     await interaction.edit_original_response(content=f"{rang_user_give.mention} hat nun Level {lvl}!")

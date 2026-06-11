@@ -3,10 +3,10 @@ import discord
 from config import load_config, load_file_config, save_file_config
 
 
-async def handler(interaction: discord.Interaction, allgemein_channel: discord.TextChannel = None, spam_channel: discord.TextChannel = None, keyword: str = None, gif_channel: discord.TextChannel = None, log_channel: discord.TextChannel = None, musiccommand_channel: discord.TextChannel = None, temp_template_channel: discord.VoiceChannel = None, temp_category: discord.CategoryChannel = None, botcommand_channel: discord.TextChannel = None, adminrole: discord.Role = None, botrole: discord.Role = None, picture_channel: discord.TextChannel = None, api_key_weather: str = None, base_url: str = None, geonames_username: str = None):
+async def handler(interaction: discord.Interaction, allgemein_channel: discord.TextChannel = None, spam_channel: discord.TextChannel = None, keyword: str = None, gif_channel: discord.TextChannel = None, log_channel: discord.TextChannel = None, musiccommand_channel: discord.TextChannel = None, temp_template_channel: discord.VoiceChannel = None, temp_category: discord.CategoryChannel = None, botcommand_channel: discord.TextChannel = None, adminrole: discord.Role = None, botrole: discord.Role = None, picture_channel: discord.TextChannel = None):
     await interaction.response.defer()
     data = load_file_config()
-    variables = [allgemein_channel, spam_channel, keyword, gif_channel, log_channel, musiccommand_channel, temp_template_channel, temp_category, botcommand_channel, adminrole, botrole, picture_channel, api_key_weather, base_url, geonames_username]
+    variables = [allgemein_channel, spam_channel, keyword, gif_channel, log_channel, musiccommand_channel, temp_template_channel, temp_category, botcommand_channel, adminrole, botrole, picture_channel]
     if allgemein_channel is not None:
         data['ALLGEMEIN_ID'] = allgemein_channel.id
     if spam_channel is not None:
@@ -29,12 +29,6 @@ async def handler(interaction: discord.Interaction, allgemein_channel: discord.T
         data['TEMP_CATEGORY_ID'] = temp_category.id
     if adminrole is not None:
         data['ALLOWED_ROLE_IDS'] = adminrole.id
-    if api_key_weather is not None:
-        data['API_KEY'] = api_key_weather
-    if base_url is not None:
-        data['BASE_URL'] = base_url
-    if geonames_username is not None:
-        data['GEONAMES_API_USERNAME'] = geonames_username
     if botrole is not None:
         data['IGNORED_ROLE_ID'] = botrole.id
 
@@ -58,9 +52,6 @@ async def handler(interaction: discord.Interaction, allgemein_channel: discord.T
         embed.add_field(name="eingeschränkte Rollen", value=f"{data.get('BLOCKED_CHANNEL_IDS')}", inline=False)
         embed.add_field(name="Admninrolle", value=f"{data.get('ALLOWED_ROLE_IDS')}", inline=False)
         embed.add_field(name="Botrolle bzgl. Userzahl", value=f"{data.get('IGNORED_ROLE_ID')}", inline=False)
-        embed.add_field(name="API-Key für Wetter", value=f"{data.get('API_KEY')}", inline=False)
-        embed.add_field(name="BASE-URL für Wetter", value=f"{data.get('BASE_URL')}", inline=False)
-        embed.add_field(name="GEONAMES Username für Wetter", value=f"{data.get('GEONAMES_API_USERNAME')}", inline=False)
         await interaction.edit_original_response(embed=embed)
     else:
         save_file_config(data)

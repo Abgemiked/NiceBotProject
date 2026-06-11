@@ -37,9 +37,6 @@ KNOWN_KEYS = [
     "IGNORED_ROLE_ID",
     "GUILD_ID",
     "APPLICATION_ID",
-    "API_KEY",
-    "BASE_URL",
-    "GEONAMES_API_USERNAME",
 ]
 
 

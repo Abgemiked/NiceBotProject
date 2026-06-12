@@ -40,7 +40,7 @@ Phase 7 Stage A.5 — Teilnehmer-Rolle (Sichtbarkeits-Modell):
       - turnier-uebersicht:  erbt Kategorie (alle sehen, nur EM/Bot posten)
       - teilnehmer-infos:    @everyone unsichtbar; Teilnehmer-Rolle liest;
                              EM volle Rechte
-      - em-eventfeed:        @everyone unsichtbar; Teilnehmer-Rolle liest;
+      - em-eventfeed:        NUR EM/Bot/Webhook (Teilnehmer sehen ihn nicht);
                              EM volle Rechte + Webhook
 
     POST /internal/tournaments/discord/role-assign
@@ -232,6 +232,14 @@ def create_service_app(cfg_json, bot):
                 ),
             }
 
+            # EM-only-Channel: @everyone unsichtbar, KEINE Teilnehmer-Rolle —
+            # nur EM/Bot sehen+schreiben (+ Webhook).
+            em_only = {
+                em_role: full,
+                guild.me: full,
+                guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            }
+
             # News (teilnehmer-infos): nur Teilnehmer lesen, nur EM/Bot schreiben
             news = await guild.create_text_channel(
                 NEWS_CHANNEL_NAME,
@@ -241,11 +249,11 @@ def create_service_app(cfg_json, bot):
             )
             created["news_channel_id"] = str(news.id)
 
-            # EM-Eventfeed: nur Teilnehmer lesen, EM/Bot schreiben (+ Webhook)
+            # EM-Eventfeed: NUR EM/Bot/Webhook — Teilnehmer sehen ihn NICHT
             eventfeed = await guild.create_text_channel(
                 EVENTFEED_CHANNEL_NAME,
                 category=category,
-                overwrites=participants_only,
+                overwrites=em_only,
                 reason="Turnier-Automatisierung: EM-Eventfeed",
             )
             created["eventfeed_channel_id"] = str(eventfeed.id)

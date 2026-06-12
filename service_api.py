@@ -213,8 +213,12 @@ def create_service_app(cfg_json, bot):
             created["overview_channel_id"] = str(overview.id)
             if overview_url:
                 try:
+                    # allowed_mentions=none(): Der Turniername ist User-Input —
+                    # ein Name wie "@everyone Cup" darf NIEMALS die Guild pingen
+                    # (Audit M2). Gilt für JEDE Nachricht mit Turnier-/User-Text.
                     msg = await overview.send(
-                        f"**{category_name}** — Übersicht & Live-Bracket:\n{overview_url}"
+                        f"**{category_name}** — Übersicht & Live-Bracket:\n{overview_url}",
+                        allowed_mentions=discord.AllowedMentions.none(),
                     )
                     await msg.pin(reason="Turnier-Übersicht-Link")
                 except discord.HTTPException:

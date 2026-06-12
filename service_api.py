@@ -18,17 +18,36 @@ Phase 7 Stage A — Turnier-Artefakte (Kategorie + Channels + Webhook):
 
     POST /internal/tournaments/discord
         Body: {"tournament_name": "…", "slug": "…", "overview_url": "https://…"}
-        201 → {"category_id", "news_channel_id", "eventfeed_channel_id",
-               "overview_channel_id", "webhook_id", "webhook_url"}
+        201 → {"category_id", "participant_role_id", "news_channel_id",
+               "eventfeed_channel_id", "overview_channel_id",
+               "webhook_id", "webhook_url"}
         502 → {"error": "…", "created": {…}}  (Teilzustand wird IMMER
                zurückgegeben, damit das Backend ihn speichern/aufräumen kann)
 
     DELETE /internal/tournaments/discord
-        Body: {"category_id": "…", "channel_ids": ["…"], "webhook_id": "…"}
+        Body: {"category_id": "…", "channel_ids": ["…"], "webhook_id": "…",
+               "participant_role_id": "…"}
         Löscht AUSSCHLIESSLICH die übergebenen IDs (kein Lösch-Scan, nie
         nach Namen). Bereits gelöschte Artefakte (404) werden toleriert.
         200 → {"deleted": […], "missing": […]}
         502 → {"deleted": […], "missing": […], "errors": […]}
+
+Phase 7 Stage A.5 — Teilnehmer-Rolle (Sichtbarkeits-Modell):
+
+    Pro Turnier eine Rolle "turnierteilnehmer-[Name]" (mentionable=False).
+    Sichtbarkeit:
+      - Kategorie:           @everyone sichtbar, read-only; EM volle Rechte
+      - turnier-uebersicht:  erbt Kategorie (alle sehen, nur EM/Bot posten)
+      - teilnehmer-infos:    @everyone unsichtbar; Teilnehmer-Rolle liest;
+                             EM volle Rechte
+      - em-eventfeed:        @everyone unsichtbar; Teilnehmer-Rolle liest;
+                             EM volle Rechte + Webhook
+
+    POST /internal/tournaments/discord/role-assign
+        Body: {"role_id": "…", "discord_id": "…"}  → member.add_roles
+    POST /internal/tournaments/discord/role-remove
+        Body: {"role_id": "…", "discord_id": "…"}  → member.remove_roles
+    Beide 404-tolerant (Rolle/Member weg → klare Meldung, kein Crash).
 
 Sicherheit/Betrieb:
 - KEIN Host-Port-Mapping — der Endpoint ist nur aus den Docker-Netzen des
@@ -59,6 +78,9 @@ EVENTFEED_CHANNEL_NAME = "em-eventfeed"
 OVERVIEW_CHANNEL_NAME = "turnier-uebersicht"
 WEBHOOK_NAME = "EM-Feed"
 
+# Stage A.5: Teilnehmer-Rolle je Turnier (Discord-Limit: Rollenname ≤100)
+PARTICIPANT_ROLE_PREFIX = "turnierteilnehmer-"
+
 
 def _full_access_overwrite():
     """Volle Rechte für EM-Rolle/Bot auf Kategorie-Ebene (Channels erben)."""
@@ -72,6 +94,11 @@ def _full_access_overwrite():
         connect=True,
         speak=True,
     )
+
+
+def _read_only_overwrite():
+    """Sichtbar, aber nicht schreibbar (Kategorie-Default für @everyone)."""
+    return discord.PermissionOverwrite(view_channel=True, send_messages=False)
 
 
 def _valid_snowflake(value):
@@ -160,9 +187,14 @@ def create_service_app(cfg_json, bot):
             )
 
         full = _full_access_overwrite()
-        # Kategorie: EM-Rolle + Bot volle Rechte; @everyone bleibt Default
-        # (Sichtbarkeit pro Channel unten verschärft).
-        category_overwrites = {em_role: full, guild.me: full}
+        # Sichtbarkeits-Modell (Stage A.5):
+        # Kategorie: @everyone sichtbar aber read-only; EM-Rolle + Bot volle
+        # Rechte. turnier-uebersicht erbt diese Overwrites 1:1 (synced).
+        category_overwrites = {
+            em_role: full,
+            guild.me: full,
+            guild.default_role: _read_only_overwrite(),
+        }
 
         created = {}
         try:
@@ -172,31 +204,49 @@ def create_service_app(cfg_json, bot):
             )
             created["category_id"] = str(category.id)
 
-            # News: Teilnehmer lesen, nur EM/Bot schreiben
+            # Teilnehmer-Rolle: wird bei An-/Abmeldung vom Backend vergeben/
+            # entzogen (role-assign/role-remove). NACH der Kategorie angelegt,
+            # damit ein Teilzustand immer per category_id im Backend landet.
+            role_name = (PARTICIPANT_ROLE_PREFIX + category_name)[:MAX_CHANNEL_NAME]
+            participant_role = await guild.create_role(
+                name=role_name,
+                mentionable=False,
+                hoist=False,
+                reason=f"Turnier-Automatisierung: Teilnehmer-Rolle {category_name}",
+            )
+            created["participant_role_id"] = str(participant_role.id)
+
+            # Nur-Teilnehmer-Channels: @everyone unsichtbar, Teilnehmer-Rolle
+            # liest (kein Schreiben), EM/Bot volle Rechte.
+            participants_only = {
+                em_role: full,
+                guild.me: full,
+                guild.default_role: discord.PermissionOverwrite(view_channel=False),
+                participant_role: discord.PermissionOverwrite(
+                    view_channel=True, send_messages=False
+                ),
+            }
+
+            # News (teilnehmer-infos): nur Teilnehmer lesen, nur EM/Bot schreiben
             news = await guild.create_text_channel(
                 NEWS_CHANNEL_NAME,
                 category=category,
-                overwrites={
-                    **category_overwrites,
-                    guild.default_role: discord.PermissionOverwrite(send_messages=False),
-                },
+                overwrites=participants_only,
                 reason="Turnier-Automatisierung: Teilnehmer-Infos",
             )
             created["news_channel_id"] = str(news.id)
 
-            # EM-Eventfeed: NUR EM-Rolle + Bot sichtbar
+            # EM-Eventfeed: nur Teilnehmer lesen, EM/Bot schreiben (+ Webhook)
             eventfeed = await guild.create_text_channel(
                 EVENTFEED_CHANNEL_NAME,
                 category=category,
-                overwrites={
-                    **category_overwrites,
-                    guild.default_role: discord.PermissionOverwrite(view_channel=False),
-                },
+                overwrites=participants_only,
                 reason="Turnier-Automatisierung: EM-Eventfeed",
             )
             created["eventfeed_channel_id"] = str(eventfeed.id)
 
-            # Übersicht: Teilnehmer lesen, Topic + Pin mit Link zur Live-Seite
+            # Übersicht: erbt die Kategorie-Overwrites (alle sehen, read-only),
+            # Topic + Pin mit Link zur Live-Seite
             topic = (
                 f"Turnier-Übersicht: {overview_url}"[:MAX_TOPIC] if overview_url else None
             )
@@ -204,10 +254,7 @@ def create_service_app(cfg_json, bot):
                 OVERVIEW_CHANNEL_NAME,
                 category=category,
                 topic=topic,
-                overwrites={
-                    **category_overwrites,
-                    guild.default_role: discord.PermissionOverwrite(send_messages=False),
-                },
+                overwrites=dict(category_overwrites),
                 reason="Turnier-Automatisierung: Übersicht",
             )
             created["overview_channel_id"] = str(overview.id)
@@ -261,10 +308,11 @@ def create_service_app(cfg_json, bot):
 
         category_id = body.get("category_id")
         webhook_id = body.get("webhook_id")
+        participant_role_id = body.get("participant_role_id")
         raw_channel_ids = body.get("channel_ids") or []
         if not isinstance(raw_channel_ids, list):
             return web.json_response({"error": "channel_ids muss eine Liste sein"}, status=400)
-        for value in [category_id, webhook_id, *raw_channel_ids]:
+        for value in [category_id, webhook_id, participant_role_id, *raw_channel_ids]:
             if value is not None and not _valid_snowflake(value):
                 return web.json_response(
                     {"error": f"Ungültige Discord-ID: {value!r}"}, status=400
@@ -321,16 +369,135 @@ def create_service_app(cfg_json, bot):
         if category_id:
             await delete_channel_like(category_id, "Kategorie")
 
+        # Teilnehmer-Rolle (Stage A.5): guild.get_role ist per Konstruktion
+        # auf DIESE Guild beschränkt; nicht (mehr) vorhandene Rolle → missing.
+        if participant_role_id:
+            role = guild.get_role(int(participant_role_id))
+            if role is None:
+                missing.append(participant_role_id)
+            else:
+                try:
+                    await role.delete(reason="Turnier-Automatisierung: Cleanup")
+                    deleted.append(participant_role_id)
+                except discord.NotFound:
+                    missing.append(participant_role_id)
+                except discord.Forbidden:
+                    errors.append(f"Rolle {participant_role_id}: fehlende Rechte")
+                except discord.HTTPException as exc:
+                    errors.append(f"Rolle {participant_role_id}: {exc}")
+
         payload = {"deleted": deleted, "missing": missing}
         if errors:
             payload["errors"] = errors
             return web.json_response(payload, status=502)
         return web.json_response(payload)
 
+    async def _resolve_role_member(request):
+        """Gemeinsame Validierung für role-assign/role-remove.
+
+        Liefert (role, member, None) oder (None, None, Fehler-Response).
+        404-tolerant: Rolle/Member nicht (mehr) vorhanden → klare Meldung,
+        kein Crash — das Backend behandelt Rollen-Sync als best effort.
+        """
+        if not _token_ok(request, cfg_json.get("TURNIER_SERVICE_TOKEN")):
+            return None, None, web.json_response(
+                {"error": "Ungültiger Service-Token"}, status=401
+            )
+        try:
+            body = await request.json()
+        except Exception:
+            return None, None, web.json_response(
+                {"error": "Ungültiger JSON-Body"}, status=400
+            )
+        if not isinstance(body, dict):
+            return None, None, web.json_response(
+                {"error": "Ungültiger JSON-Body"}, status=400
+            )
+        role_id = body.get("role_id")
+        discord_id = body.get("discord_id")
+        if not _valid_snowflake(role_id) or not _valid_snowflake(discord_id):
+            return None, None, web.json_response(
+                {"error": "role_id und discord_id müssen gültige Discord-IDs sein"},
+                status=400,
+            )
+
+        guild = bot.get_guild(cfg_json.get("GUILD_ID"))
+        if guild is None:
+            return None, None, web.json_response(
+                {"error": "Guild nicht verfügbar"}, status=503
+            )
+
+        # Guild-Scope: get_role kennt nur Rollen DIESER Guild
+        role = guild.get_role(int(role_id))
+        if role is None:
+            return None, None, web.json_response(
+                {"error": f"Rolle {role_id} existiert nicht (mehr) auf der Guild"},
+                status=404,
+            )
+
+        member = guild.get_member(int(discord_id))
+        if member is None:
+            try:
+                member = await guild.fetch_member(int(discord_id))
+            except discord.NotFound:
+                return None, None, web.json_response(
+                    {"error": f"User {discord_id} ist kein Guild-Mitglied (mehr)"},
+                    status=404,
+                )
+            except discord.HTTPException:
+                return None, None, web.json_response(
+                    {"error": "Discord nicht erreichbar"}, status=503
+                )
+        return role, member, None
+
+    async def assign_participant_role(request):
+        """Teilnehmer-Rolle vergeben (idempotent — add_roles doppelt ist ok)."""
+        role, member, error = await _resolve_role_member(request)
+        if error is not None:
+            return error
+        try:
+            await member.add_roles(role, reason="Turnier-Automatisierung: Teilnehmer")
+        except discord.NotFound:
+            return web.json_response(
+                {"error": "Rolle oder Member wurde zwischenzeitlich entfernt"}, status=404
+            )
+        except discord.Forbidden:
+            return web.json_response(
+                {"error": "Discord verweigert die Aktion (fehlende Bot-Rechte)"}, status=502
+            )
+        except discord.HTTPException as exc:
+            return web.json_response({"error": f"Discord-Fehler: {exc}"}, status=502)
+        return web.json_response({"ok": True})
+
+    async def remove_participant_role(request):
+        """Teilnehmer-Rolle entziehen (idempotent — remove ohne Rolle ist ok)."""
+        role, member, error = await _resolve_role_member(request)
+        if error is not None:
+            return error
+        try:
+            await member.remove_roles(role, reason="Turnier-Automatisierung: Abmeldung")
+        except discord.NotFound:
+            return web.json_response(
+                {"error": "Rolle oder Member wurde zwischenzeitlich entfernt"}, status=404
+            )
+        except discord.Forbidden:
+            return web.json_response(
+                {"error": "Discord verweigert die Aktion (fehlende Bot-Rechte)"}, status=502
+            )
+        except discord.HTTPException as exc:
+            return web.json_response({"error": f"Discord-Fehler: {exc}"}, status=502)
+        return web.json_response({"ok": True})
+
     app = web.Application()
     app.router.add_get("/internal/members/{discord_id}/roles", member_roles)
     app.router.add_post("/internal/tournaments/discord", create_tournament_discord)
     app.router.add_delete("/internal/tournaments/discord", delete_tournament_discord)
+    app.router.add_post(
+        "/internal/tournaments/discord/role-assign", assign_participant_role
+    )
+    app.router.add_post(
+        "/internal/tournaments/discord/role-remove", remove_participant_role
+    )
     return app
 
 

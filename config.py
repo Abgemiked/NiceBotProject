@@ -40,6 +40,8 @@ KNOWN_KEYS = [
     # Turnier-Schnittstelle (/verknüpfen) — Token gehört in die .env, nicht in config.json
     "TURNIER_API_URL",
     "TURNIER_SERVICE_TOKEN",
+    # Interner Service-Endpoint (Guild-Rollen fürs Turnier-Backend, Phase 4)
+    "SERVICE_API_PORT",
 ]
 
 

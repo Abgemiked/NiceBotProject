@@ -22,10 +22,11 @@ services:
     networks:
       - default
       - npm-web
-# Kein Port-Mapping: weiterhin kein eingehender HTTP-Traffic.
-# npm-web (externes NPM-Netz) ist NUR fuer den Outbound-Call des
-# /verknuepfen-Commands noetig: der Bot muss turnier-backend:3130 erreichen,
-# und der Turnier-Backend-Container haengt im NPM-Netz.
+# Kein Host-Port-Mapping: der interne Service-Endpoint (service_api.py,
+# Port 8130) ist nur aus den Docker-Netzen erreichbar — turnier-backend
+# erreicht ihn ueber das gemeinsame npm-web-Netz als http://nicebot:8130.
+# npm-web wird ausserdem fuer den Outbound-Call des /verknuepfen-Commands
+# gebraucht (Bot → turnier-backend:3130).
 
 networks:
   default:

@@ -23,6 +23,7 @@ from events.logs.leave_log import on_member_remove_handler
 from events.temp_channel.voice_temp import on_voice_state_update_handler
 from events.temp_channel.voice_temp import handle_empty_temp_channels
 from events.statistic_channel.statistic import update_statistics
+from service_api import start_service_api
 
 cfg_json = load_config()
 
@@ -31,16 +32,21 @@ bot = discord.Client(intents=intents)
 tree = app_commands.CommandTree(bot)
 
 _statistics_loop_started = False
+_service_api_started = False
 
 
 @bot.event
 async def on_ready():
-    global _statistics_loop_started
+    global _statistics_loop_started, _service_api_started
     await tree.sync()
     print("Ready!")
     if not _statistics_loop_started:
         _statistics_loop_started = True
         asyncio.create_task(update_statistics_loop())
+    if not _service_api_started:
+        _service_api_started = True
+        # Interner Endpoint fürs Turnier-Backend (Guild-Rollen/Mitglieds-Check)
+        asyncio.create_task(start_service_api(cfg_json, bot))
 
 
 async def update_statistics_loop():

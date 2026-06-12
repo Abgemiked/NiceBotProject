@@ -37,6 +37,9 @@ KNOWN_KEYS = [
     "IGNORED_ROLE_ID",
     "GUILD_ID",
     "APPLICATION_ID",
+    # Turnier-Schnittstelle (/verknüpfen) — Token gehört in die .env, nicht in config.json
+    "TURNIER_API_URL",
+    "TURNIER_SERVICE_TOKEN",
 ]
 
 

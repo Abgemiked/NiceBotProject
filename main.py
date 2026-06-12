@@ -16,6 +16,7 @@ from commands.help_cmd import handler as hilfe_cmd
 from commands.com_cmds.ranklist_cmd import handler as ranklist_cmd
 from commands.com_cmds.rank_cmd import handler as rank_cmd
 from commands.team_cmds.rankgive_cmd import handler as rankgive_cmd
+from commands.com_cmds.verknuepfen_cmd import handler as verknuepfen_cmd
 from events.message_event import handler as message_handler
 from events.logs.delete_log import on_raw_message_delete_handler
 from events.logs.leave_log import on_member_remove_handler
@@ -103,6 +104,11 @@ async def rang(interaction: discord.Interaction, rang_user: discord.Member = Non
 @tree.command(description="Gibt einem Benutzer ein bestimmte Level")
 async def rang_geben(interaction: discord.Interaction, rang_user_give: discord.Member, lvl: int):
     await rankgive_cmd(interaction, rang_user_give, lvl)
+
+
+@tree.command(name="verknüpfen", description="Persönlicher Link zu deinem Turnier-Profil (turnier.abgemiked.de)")
+async def verknuepfen(interaction: discord.Interaction):
+    await verknuepfen_cmd(cfg_json, interaction)
 
 
 @bot.event

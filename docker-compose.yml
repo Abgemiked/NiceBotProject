@@ -19,5 +19,17 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-# Kein Port-Mapping, kein npm-web-Netz: reiner Outbound-Bot (Discord-Gateway),
-# kein eingehender HTTP-Traffic noetig.
+    networks:
+      - default
+      - npm-web
+# Kein Port-Mapping: weiterhin kein eingehender HTTP-Traffic.
+# npm-web (externes NPM-Netz) ist NUR fuer den Outbound-Call des
+# /verknuepfen-Commands noetig: der Bot muss turnier-backend:3130 erreichen,
+# und der Turnier-Backend-Container haengt im NPM-Netz.
+
+networks:
+  default:
+    driver: bridge
+  npm-web:
+    external: true
+    name: nginx-proxy-manager_web_net

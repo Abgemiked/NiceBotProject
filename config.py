@@ -42,6 +42,9 @@ KNOWN_KEYS = [
     "TURNIER_SERVICE_TOKEN",
     # Interner Service-Endpoint (Guild-Rollen fürs Turnier-Backend, Phase 4)
     "SERVICE_API_PORT",
+    # Eventmanagement-Rollen-ID für Turnier-Kategorien (Phase 7, optional —
+    # Default ist die reale NiceCom-EM-Rolle, siehe service_api.DEFAULT_EM_ROLE_ID)
+    "TURNIER_EM_ROLE_ID",
 ]
 
 

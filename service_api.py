@@ -48,6 +48,11 @@ Phase 7 Stage A.5 — Teilnehmer-Rolle (Sichtbarkeits-Modell):
     POST /internal/tournaments/discord/role-remove
         Body: {"role_id": "…", "discord_id": "…"}  → member.remove_roles
     Beide 404-tolerant (Rolle/Member weg → klare Meldung, kein Crash).
+    Defense-in-Depth (Audit A.5/F1): Beide Endpoints akzeptieren NUR Rollen,
+    deren Name mit PARTICIPANT_ROLE_PREFIX beginnt — bei einem Token-Leck
+    kann niemand EM-/Mod-/sonstige Rollen vergeben oder entziehen (403).
+    Zusätzlich 403, wenn die Rolle >= Bot-Top-Rolle liegt (vom Bot ohnehin
+    nicht verwaltbar — klare Meldung statt Discord-Forbidden).
 
 Sicherheit/Betrieb:
 - KEIN Host-Port-Mapping — der Endpoint ist nur aus den Docker-Netzen des
@@ -433,6 +438,34 @@ def create_service_app(cfg_json, bot):
             return None, None, web.json_response(
                 {"error": f"Rolle {role_id} existiert nicht (mehr) auf der Guild"},
                 status=404,
+            )
+
+        # Defense-in-Depth (Audit A.5/F1): NUR Teilnehmer-Rollen sind über
+        # diese Endpoints verwaltbar. Ohne diesen Guard könnte ein geleakter
+        # Service-Token jedem Member jede Rolle (EM/Mod/…) geben/entziehen.
+        if not role.name.startswith(PARTICIPANT_ROLE_PREFIX):
+            return None, None, web.json_response(
+                {
+                    "error": (
+                        f"Rolle {role_id} ist keine Turnier-Teilnehmer-Rolle "
+                        f"(Name muss mit '{PARTICIPANT_ROLE_PREFIX}' beginnen) "
+                        "— Zuweisung/Entzug verweigert"
+                    )
+                },
+                status=403,
+            )
+
+        # Sicherheits-Guard: Rollen auf/über der Bot-Top-Rolle kann der Bot
+        # ohnehin nicht verwalten → klare 403 statt Discord-Forbidden.
+        if guild.me is not None and role >= guild.me.top_role:
+            return None, None, web.json_response(
+                {
+                    "error": (
+                        f"Rolle {role_id} liegt auf/über der Bot-Rolle "
+                        "und kann nicht verwaltet werden"
+                    )
+                },
+                status=403,
             )
 
         member = guild.get_member(int(discord_id))

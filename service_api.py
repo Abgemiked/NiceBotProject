@@ -81,6 +81,26 @@ Phase 7 Stage B — Team-Channels + Team-Rollen:
     POST /internal/teams/discord/role-remove  {role_id, discord_id}
         F1-Guard: akzeptieren NUR Rollen mit Suffix "-Leader"/"-Member".
 
+Phase 7 Stage B.1 — globale, anpingbare Rolle "Teamleader":
+
+    EINE serverweite Rolle "Teamleader" (mentionable=True, keine Permissions),
+    NICHT pro Team/Turnier. EM darf sie in Turnier-Kategorie-Channeln pingen;
+    das Notification-Scoping ergibt sich automatisch aus der Channel-
+    Sichtbarkeit (nur turnierteilnehmer-[T]-Inhaber sehen die Channels) — keine
+    Zusatzlogik. Der Bot selbst pingt nie.
+
+    POST /internal/teamleader-role/assign  {discord_id}
+    POST /internal/teamleader-role/remove  {discord_id}
+        Rolle wird per ensure-create sichergestellt. Guard: es wird
+        AUSSCHLIESSLICH die Rolle mit exakt dem Namen "Teamleader" angefasst
+        (sonst 403; analog Stage-A.5/F1). 404-tolerant (Member weg).
+        200 → {"ok": true, "role_id": "…"}
+
+    Kategorie-Position: create_tournament_discord sortiert die neue Turnier-
+    Kategorie ZWISCHEN "Öffentlich" und "Temporäre Channel" ein (Anker per Name
+    zur Laufzeit, case-insensitive/umlaut-tolerant; Default-Position bleibt,
+    wenn kein Anker gefunden wird — kein Fehler).
+
 Sicherheit/Betrieb:
 - KEIN Host-Port-Mapping — der Endpoint ist nur aus den Docker-Netzen des
   Bots erreichbar (turnier-backend hängt im selben npm-web-Netz).
@@ -125,6 +145,20 @@ MAX_ROLE_NAME = 100
 TEAM_TEXT_CHANNEL_PREFIX = "team-"
 TEAM_VOICE_CHANNEL_PREFIX = "Team "
 
+# Stage B.1: EINE serverweite, anpingbare Rolle "Teamleader" (NICHT pro Team/
+# Turnier). Wird vom Backend jedem aktiven Turnier-Teamleader vergeben/entzogen.
+# Der exakte Name ist der Guard (analog Stage-A.5/F1): die Teamleader-Endpoints
+# vergeben/entziehen NUR genau diese Rolle. mentionable=True (EM darf @Teamleader
+# in Kategorie-Channeln pingen); der Bot selbst pingt nie.
+TEAMLEADER_ROLE_NAME = "Teamleader"
+
+# Anker-Kategorien für die Stage-B.1-Positionierung der Turnier-Kategorie.
+# Zur Laufzeit per Name aufgelöst (case-insensitive, mit/ohne Umlaut), damit
+# keine IDs fest verdrahtet werden. Turnier-Kategorie soll direkt UNTER
+# "Öffentlich" (bzw. direkt ÜBER "Temporäre Channel") liegen.
+PUBLIC_CATEGORY_NAMES = ("öffentlich", "offentlich")
+TEMP_CATEGORY_NAMES = ("temporäre channel", "temporare channel")
+
 
 def _team_role_names(team_name):
     """Liefert (leader_name, member_name) ≤100 Zeichen.
@@ -144,6 +178,81 @@ def _is_team_role(role):
     return role.name.endswith(TEAM_ROLE_LEADER_SUFFIX) or role.name.endswith(
         TEAM_ROLE_MEMBER_SUFFIX
     )
+
+
+async def _ensure_teamleader_role(guild, reason):
+    """Die EINE serverweite Rolle "Teamleader" sicherstellen (ensure-create).
+
+    Liefert (role, None) bei Erfolg oder (None, error_message). Sucht zunächst
+    eine bestehende Rolle mit exakt diesem Namen; legt sie sonst an
+    (mentionable=True, keine Permissions). Idempotent.
+    """
+    role = discord.utils.get(guild.roles, name=TEAMLEADER_ROLE_NAME)
+    if role is not None:
+        return role, None
+    try:
+        role = await guild.create_role(
+            name=TEAMLEADER_ROLE_NAME,
+            mentionable=True,
+            hoist=False,
+            permissions=discord.Permissions.none(),
+            reason=reason,
+        )
+        return role, None
+    except discord.Forbidden:
+        return None, "Discord verweigert das Anlegen der Teamleader-Rolle (fehlende Bot-Rechte)"
+    except discord.HTTPException as exc:
+        return None, f"Discord-Fehler beim Anlegen der Teamleader-Rolle: {exc}"
+
+
+def _resolve_anchor_categories(guild):
+    """Anker-Kategorien "Öffentlich" und "Temporäre Channel" per Name auflösen.
+
+    Case-insensitive, tolerant gegenüber fehlenden Umlauten. Liefert
+    (public_category | None, temp_category | None). Wird zur Laufzeit
+    ausgewertet — keine fest verdrahteten IDs.
+    """
+    public_cat = None
+    temp_cat = None
+    for cat in guild.categories:
+        low = cat.name.strip().lower()
+        if public_cat is None and low in PUBLIC_CATEGORY_NAMES:
+            public_cat = cat
+        elif temp_cat is None and low in TEMP_CATEGORY_NAMES:
+            temp_cat = cat
+    return public_cat, temp_cat
+
+
+async def _position_tournament_category(guild, category):
+    """Turnier-Kategorie ZWISCHEN "Öffentlich" und "Temporäre Channel" einsortieren.
+
+    Idempotent/wiederholbar (auch aus einem späteren Sync nutzbar). Bevorzugt
+    category.move(after=Öffentlich) — robust gegen Discord-Reorder-Eigenheiten;
+    fällt auf move(before=Temporäre Channel) bzurück, wenn nur der untere Anker
+    existiert. Ist KEIN Anker auffindbar, bleibt die Default-Position bestehen
+    (kein Fehler — nur Logeintrag). Wirft nie.
+    """
+    try:
+        public_cat, temp_cat = _resolve_anchor_categories(guild)
+        if public_cat is None and temp_cat is None:
+            print(
+                "Turnier-Kategorie-Position: Anker 'Öffentlich'/'Temporäre Channel' "
+                "nicht gefunden — Default-Position bleibt"
+            )
+            return False
+        if public_cat is not None:
+            await category.move(after=public_cat)
+        else:
+            await category.move(before=temp_cat)
+        return True
+    except (discord.Forbidden, discord.HTTPException) as exc:
+        # Position ist nice-to-have; ein Fehler darf die Provisionierung nie
+        # killen (die Kategorie ist bereits angelegt).
+        print(f"Turnier-Kategorie-Position konnte nicht gesetzt werden: {exc}")
+        return False
+    except Exception as exc:  # noqa: BLE001 — defensiv, best effort
+        print(f"Turnier-Kategorie-Position unerwarteter Fehler: {exc}")
+        return False
 
 
 def _full_access_overwrite():
@@ -267,6 +376,11 @@ def create_service_app(cfg_json, bot):
                 reason=f"Turnier-Automatisierung: {category_name}",
             )
             created["category_id"] = str(category.id)
+
+            # Stage B.1: Kategorie ZWISCHEN "Öffentlich" und "Temporäre Channel"
+            # einsortieren (best effort; Default-Position bleibt, wenn die Anker
+            # fehlen). NACH dem Anlegen — die Kategorie existiert bereits.
+            await _position_tournament_category(guild, category)
 
             # Teilnehmer-Rolle: wird bei An-/Abmeldung vom Backend vergeben/
             # entzogen (role-assign/role-remove). NACH der Kategorie angelegt,
@@ -887,6 +1001,117 @@ def create_service_app(cfg_json, bot):
             return web.json_response({"error": f"Discord-Fehler: {exc}"}, status=502)
         return web.json_response({"ok": True})
 
+    # --- Stage B.1: globale, anpingbare Rolle "Teamleader" -------------------
+
+    async def _resolve_teamleader_member(request):
+        """Token + discord_id validieren, Member holen, Teamleader-Rolle sichern.
+
+        Liefert (role, member, None) oder (None, None, Fehler-Response).
+        Guard: es wird AUSSCHLIESSLICH die Rolle mit exakt dem Namen
+        "Teamleader" angefasst (ensure-create) — ein geleakter Service-Token
+        kann über diese Endpoints keine andere Rolle vergeben/entziehen.
+        404-tolerant (Member weg → klare Meldung).
+        """
+        if not _token_ok(request, cfg_json.get("TURNIER_SERVICE_TOKEN")):
+            return None, None, web.json_response(
+                {"error": "Ungültiger Service-Token"}, status=401
+            )
+        try:
+            body = await request.json()
+        except Exception:
+            return None, None, web.json_response(
+                {"error": "Ungültiger JSON-Body"}, status=400
+            )
+        if not isinstance(body, dict):
+            return None, None, web.json_response(
+                {"error": "Ungültiger JSON-Body"}, status=400
+            )
+        discord_id = body.get("discord_id")
+        if not _valid_snowflake(discord_id):
+            return None, None, web.json_response(
+                {"error": "discord_id muss eine gültige Discord-ID sein"}, status=400
+            )
+
+        guild = bot.get_guild(cfg_json.get("GUILD_ID"))
+        if guild is None:
+            return None, None, web.json_response(
+                {"error": "Guild nicht verfügbar"}, status=503
+            )
+
+        # ensure-create: die EINE serverweite Teamleader-Rolle.
+        role, err = await _ensure_teamleader_role(
+            guild, reason="Turnier-Automatisierung: globale Teamleader-Rolle"
+        )
+        if role is None:
+            return None, None, web.json_response({"error": err}, status=502)
+
+        # Defense-in-Depth: NUR die Rolle mit exakt diesem Namen ist erlaubt.
+        if role.name != TEAMLEADER_ROLE_NAME:
+            return None, None, web.json_response(
+                {"error": "Rolle ist nicht die Teamleader-Rolle — verweigert"},
+                status=403,
+            )
+        # Rolle auf/über der Bot-Top-Rolle ist nicht verwaltbar → klare 403.
+        if guild.me is not None and role >= guild.me.top_role:
+            return None, None, web.json_response(
+                {"error": "Teamleader-Rolle liegt auf/über der Bot-Rolle "
+                          "und kann nicht verwaltet werden"},
+                status=403,
+            )
+
+        member = guild.get_member(int(discord_id))
+        if member is None:
+            try:
+                member = await guild.fetch_member(int(discord_id))
+            except discord.NotFound:
+                return None, None, web.json_response(
+                    {"error": f"User {discord_id} ist kein Guild-Mitglied (mehr)"},
+                    status=404,
+                )
+            except discord.HTTPException:
+                return None, None, web.json_response(
+                    {"error": "Discord nicht erreichbar"}, status=503
+                )
+        return role, member, None
+
+    async def assign_teamleader_role(request):
+        """Globale Teamleader-Rolle vergeben (idempotent)."""
+        role, member, error = await _resolve_teamleader_member(request)
+        if error is not None:
+            return error
+        try:
+            await member.add_roles(role, reason="Turnier-Automatisierung: Teamleader")
+        except discord.NotFound:
+            return web.json_response(
+                {"error": "Rolle oder Member wurde zwischenzeitlich entfernt"}, status=404
+            )
+        except discord.Forbidden:
+            return web.json_response(
+                {"error": "Discord verweigert die Aktion (fehlende Bot-Rechte)"}, status=502
+            )
+        except discord.HTTPException as exc:
+            return web.json_response({"error": f"Discord-Fehler: {exc}"}, status=502)
+        return web.json_response({"ok": True, "role_id": str(role.id)})
+
+    async def remove_teamleader_role(request):
+        """Globale Teamleader-Rolle entziehen (idempotent)."""
+        role, member, error = await _resolve_teamleader_member(request)
+        if error is not None:
+            return error
+        try:
+            await member.remove_roles(role, reason="Turnier-Automatisierung: Teamleader entzogen")
+        except discord.NotFound:
+            return web.json_response(
+                {"error": "Rolle oder Member wurde zwischenzeitlich entfernt"}, status=404
+            )
+        except discord.Forbidden:
+            return web.json_response(
+                {"error": "Discord verweigert die Aktion (fehlende Bot-Rechte)"}, status=502
+            )
+        except discord.HTTPException as exc:
+            return web.json_response({"error": f"Discord-Fehler: {exc}"}, status=502)
+        return web.json_response({"ok": True, "role_id": str(role.id)})
+
     app = web.Application()
     app.router.add_get("/internal/members/{discord_id}/roles", member_roles)
     app.router.add_post("/internal/tournaments/discord", create_tournament_discord)
@@ -902,6 +1127,13 @@ def create_service_app(cfg_json, bot):
     app.router.add_delete("/internal/teams/discord", delete_team_discord)
     app.router.add_post("/internal/teams/discord/role-assign", assign_team_role)
     app.router.add_post("/internal/teams/discord/role-remove", remove_team_role)
+    # Stage B.1: globale Teamleader-Rolle (ensure-create, Body nur {discord_id})
+    app.router.add_post(
+        "/internal/teamleader-role/assign", assign_teamleader_role
+    )
+    app.router.add_post(
+        "/internal/teamleader-role/remove", remove_teamleader_role
+    )
     return app
 
 

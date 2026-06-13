@@ -45,6 +45,12 @@ KNOWN_KEYS = [
     # Eventmanagement-Rollen-ID für Turnier-Kategorien (Phase 7, optional —
     # Default ist die reale NiceCom-EM-Rolle, siehe service_api.DEFAULT_EM_ROLE_ID)
     "TURNIER_EM_ROLE_ID",
+    # Stage D (Slash-Commands): öffentliche Website-Basis für Anzeige-Links sowie
+    # Admin-/Caster-Rollen-IDs für die Rollenprüfung (Defaults = reale
+    # NiceCom-Rollen, siehe commands/turnier_cmds/turnier_common.py).
+    "TURNIER_PUBLIC_URL",
+    "TURNIER_ADMIN_ROLE_IDS",
+    "TURNIER_CASTER_ROLE_ID",
 ]
 
 

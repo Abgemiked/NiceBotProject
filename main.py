@@ -17,6 +17,21 @@ from commands.com_cmds.ranklist_cmd import handler as ranklist_cmd
 from commands.com_cmds.rank_cmd import handler as rank_cmd
 from commands.team_cmds.rankgive_cmd import handler as rankgive_cmd
 from commands.com_cmds.verknuepfen_cmd import handler as verknuepfen_cmd
+from commands.turnier_cmds.teilnehmer_cmds import (
+    hilfe_handler as turnier_hilfe_cmd,
+    turniere_handler as turniere_cmd,
+    info_handler as turnier_info_cmd,
+    anmelden_handler as anmelden_cmd,
+    mein_team_handler as mein_team_cmd,
+)
+from commands.turnier_cmds.admin_cmds import (
+    erstellen_handler as turnier_erstellen_cmd,
+    anmeldung_oeffnen_handler as anmeldung_oeffnen_cmd,
+    turnier_starten_handler as turnier_starten_cmd,
+    ko_starten_handler as ko_starten_cmd,
+    turnier_beenden_handler as turnier_beenden_cmd,
+    caster_info_handler as caster_info_cmd,
+)
 from events.message_event import handler as message_handler
 from events.logs.delete_log import on_raw_message_delete_handler
 from events.logs.leave_log import on_member_remove_handler
@@ -115,6 +130,65 @@ async def rang_geben(interaction: discord.Interaction, rang_user_give: discord.M
 @tree.command(name="verknüpfen", description="Persönlicher Link zu deinem Turnier-Profil (turnier.abgemiked.de)")
 async def verknuepfen(interaction: discord.Interaction):
     await verknuepfen_cmd(cfg_json, interaction)
+
+
+# ------------------------- Turnier-Commands (Stage D) -------------------------
+# Teilnehmer (jeder darf):
+@tree.command(name="turnier-hilfe", description="Übersicht aller Turnier-Befehle (rollenabhängig)")
+async def turnier_hilfe(interaction: discord.Interaction):
+    await turnier_hilfe_cmd(cfg_json, interaction)
+
+
+@tree.command(name="turniere", description="Offene & kommende Turniere anzeigen")
+async def turniere(interaction: discord.Interaction):
+    await turniere_cmd(cfg_json, interaction)
+
+
+@tree.command(name="turnier-info", description="Status, Teams und Link zu einem Turnier")
+async def turnier_info(interaction: discord.Interaction, name_oder_slug: str):
+    await turnier_info_cmd(cfg_json, interaction, name_oder_slug)
+
+
+@tree.command(name="anmelden", description="Zu einem Turnier anmelden (öffnet deine Turnierseite)")
+async def anmelden(interaction: discord.Interaction, turnier: str):
+    await anmelden_cmd(cfg_json, interaction, turnier)
+
+
+@tree.command(name="mein-team", description="Deine Turnier-Teams und -Turniere")
+async def mein_team(interaction: discord.Interaction):
+    await mein_team_cmd(cfg_json, interaction)
+
+
+# Eventmanagement / Admin (rollen-gated):
+@tree.command(name="turnier-erstellen", description="Neues Turnier anlegen (EM/Admin)")
+async def turnier_erstellen(interaction: discord.Interaction):
+    await turnier_erstellen_cmd(cfg_json, interaction)
+
+
+@tree.command(name="anmeldung-oeffnen", description="Anmeldung eines Turniers öffnen (EM/Admin)")
+async def anmeldung_oeffnen(interaction: discord.Interaction, turnier: str):
+    await anmeldung_oeffnen_cmd(cfg_json, interaction, turnier)
+
+
+@tree.command(name="turnier-starten", description="Turnier starten (EM/Admin)")
+async def turnier_starten(interaction: discord.Interaction, turnier: str):
+    await turnier_starten_cmd(cfg_json, interaction, turnier)
+
+
+@tree.command(name="ko-starten", description="KO-Phase aus den Gruppen starten (EM/Admin)")
+async def ko_starten(interaction: discord.Interaction, turnier: str):
+    await ko_starten_cmd(cfg_json, interaction, turnier)
+
+
+@tree.command(name="turnier-beenden", description="Turnier beenden – irreversibel (EM/Admin)")
+async def turnier_beenden(interaction: discord.Interaction, turnier: str):
+    await turnier_beenden_cmd(cfg_json, interaction, turnier)
+
+
+# Caster (rollen-gated):
+@tree.command(name="caster-info", description="Caster-Seite zu einem Turnier (folgt mit M6)")
+async def caster_info(interaction: discord.Interaction, turnier: str):
+    await caster_info_cmd(cfg_json, interaction, turnier)
 
 
 @bot.event

@@ -17,5 +17,6 @@
     "GUILD_ID": 1010101010101010101,
     "APPLICATION_ID": 1010101010101010101,
     "TURNIER_API_URL": "http://turnier-backend:3130",
+    "TURNIER_PUBLIC_URL": "https://turnier.abgemiked.de",
     "SERVICE_API_PORT": 8130
 }

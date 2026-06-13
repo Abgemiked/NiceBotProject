@@ -54,6 +54,33 @@ Phase 7 Stage A.5 — Teilnehmer-Rolle (Sichtbarkeits-Modell):
     Zusätzlich 403, wenn die Rolle >= Bot-Top-Rolle liegt (vom Bot ohnehin
     nicht verwaltbar — klare Meldung statt Discord-Forbidden).
 
+Phase 7 Stage B — Team-Channels + Team-Rollen:
+
+    Pro Team in einem Turnier ein Text- + Voice-Channel in der Turnier-
+    Kategorie, sichtbar/schreibbar NUR für Teammitglieder (Leader/Member-
+    Rolle) + EM (Vollrechte) + Bot; @everyone unsichtbar (kein Leak).
+    Pro TEAM zwei wiederverwendbare Rollen "[Teamname]-Leader"/"-Member"
+    (Teamnamen sind global eindeutig, Team nimmt an mehreren Turnieren teil).
+
+    POST /internal/teams/discord
+        Body: {tournament_category_id, team_name, member_discord_ids[],
+               leader_discord_id, existing_leader_role_id?,
+               existing_member_role_id?}
+        Rollen wiederverwenden (existing_*) ODER anlegen; Text+Voice-Channel
+        in der Kategorie; Rollen an Leader/Member vergeben.
+        201 → {text_channel_id, voice_channel_id, leader_role_id, member_role_id}
+        502 → {error, created}  (Teilzustand für Backend-Cleanup)
+
+    DELETE /internal/teams/discord
+        Body: {text_channel_id, voice_channel_id, leader_role_id?,
+               member_role_id?, delete_roles: bool}
+        Channels löschen (Guild-Scope, 404-tolerant). Rollen NUR wenn
+        delete_roles=true (Backend entscheidet anhand Wiederverwendung).
+
+    POST /internal/teams/discord/role-assign  {role_id, discord_id}
+    POST /internal/teams/discord/role-remove  {role_id, discord_id}
+        F1-Guard: akzeptieren NUR Rollen mit Suffix "-Leader"/"-Member".
+
 Sicherheit/Betrieb:
 - KEIN Host-Port-Mapping — der Endpoint ist nur aus den Docker-Netzen des
   Bots erreichbar (turnier-backend hängt im selben npm-web-Netz).
@@ -85,6 +112,38 @@ WEBHOOK_NAME = "EM-Feed"
 
 # Stage A.5: Teilnehmer-Rolle je Turnier (Discord-Limit: Rollenname ≤100)
 PARTICIPANT_ROLE_PREFIX = "turnierteilnehmer-"
+
+# Stage B: Team-Rollen (Team-Ebene, über mehrere Turniere wiederverwendet).
+# Namens-Suffixe — Rolle heißt "[Teamname]-Leader" bzw. "[Teamname]-Member".
+# Der Suffix dient als Defense-in-Depth-Guard (analog PARTICIPANT_ROLE_PREFIX,
+# Audit F1): Team-Rollen-Endpoints akzeptieren nur Rollen mit diesem Suffix,
+# damit ein geleakter Service-Token keine EM-/Mod-Rollen vergeben kann.
+TEAM_ROLE_LEADER_SUFFIX = "-Leader"
+TEAM_ROLE_MEMBER_SUFFIX = "-Member"
+MAX_ROLE_NAME = 100
+# Stage B: Team-Channels je (Team, Turnier)
+TEAM_TEXT_CHANNEL_PREFIX = "team-"
+TEAM_VOICE_CHANNEL_PREFIX = "Team "
+
+
+def _team_role_names(team_name):
+    """Liefert (leader_name, member_name) ≤100 Zeichen.
+
+    Der Teamname wird so gekürzt, dass auch mit Suffix das Discord-Limit von
+    100 Zeichen eingehalten wird (sonst wirft create_role).
+    """
+    leader_budget = MAX_ROLE_NAME - len(TEAM_ROLE_LEADER_SUFFIX)
+    member_budget = MAX_ROLE_NAME - len(TEAM_ROLE_MEMBER_SUFFIX)
+    base = min(leader_budget, member_budget)
+    short = team_name.strip()[:base]
+    return short + TEAM_ROLE_LEADER_SUFFIX, short + TEAM_ROLE_MEMBER_SUFFIX
+
+
+def _is_team_role(role):
+    """True, wenn der Rollenname auf ein Team-Rollen-Suffix endet (F1-Guard)."""
+    return role.name.endswith(TEAM_ROLE_LEADER_SUFFIX) or role.name.endswith(
+        TEAM_ROLE_MEMBER_SUFFIX
+    )
 
 
 def _full_access_overwrite():
@@ -405,13 +464,24 @@ def create_service_app(cfg_json, bot):
             return web.json_response(payload, status=502)
         return web.json_response(payload)
 
-    async def _resolve_role_member(request):
+    async def _resolve_role_member(request, role_guard=None, guard_error=None):
         """Gemeinsame Validierung für role-assign/role-remove.
 
         Liefert (role, member, None) oder (None, None, Fehler-Response).
         404-tolerant: Rolle/Member nicht (mehr) vorhanden → klare Meldung,
         kein Crash — das Backend behandelt Rollen-Sync als best effort.
+
+        role_guard: Callable(role)->bool. Default = Teilnehmer-Rolle (Stage
+        A.5). Stage B übergibt _is_team_role. Schlägt der Guard fehl → 403
+        mit guard_error (Defense-in-Depth gegen Token-Leck, Audit F1).
         """
+        if role_guard is None:
+            role_guard = lambda r: r.name.startswith(PARTICIPANT_ROLE_PREFIX)
+            guard_error = (
+                "Rolle {role_id} ist keine Turnier-Teilnehmer-Rolle "
+                f"(Name muss mit '{PARTICIPANT_ROLE_PREFIX}' beginnen) "
+                "— Zuweisung/Entzug verweigert"
+            )
         if not _token_ok(request, cfg_json.get("TURNIER_SERVICE_TOKEN")):
             return None, None, web.json_response(
                 {"error": "Ungültiger Service-Token"}, status=401
@@ -448,18 +518,12 @@ def create_service_app(cfg_json, bot):
                 status=404,
             )
 
-        # Defense-in-Depth (Audit A.5/F1): NUR Teilnehmer-Rollen sind über
-        # diese Endpoints verwaltbar. Ohne diesen Guard könnte ein geleakter
-        # Service-Token jedem Member jede Rolle (EM/Mod/…) geben/entziehen.
-        if not role.name.startswith(PARTICIPANT_ROLE_PREFIX):
+        # Defense-in-Depth (Audit A.5/F1): NUR die per role_guard erlaubten
+        # Rollen sind über diese Endpoints verwaltbar. Ohne diesen Guard könnte
+        # ein geleakter Service-Token jedem Member jede Rolle (EM/Mod/…) geben.
+        if not role_guard(role):
             return None, None, web.json_response(
-                {
-                    "error": (
-                        f"Rolle {role_id} ist keine Turnier-Teilnehmer-Rolle "
-                        f"(Name muss mit '{PARTICIPANT_ROLE_PREFIX}' beginnen) "
-                        "— Zuweisung/Entzug verweigert"
-                    )
-                },
+                {"error": guard_error.format(role_id=role_id)},
                 status=403,
             )
 
@@ -529,6 +593,300 @@ def create_service_app(cfg_json, bot):
             return web.json_response({"error": f"Discord-Fehler: {exc}"}, status=502)
         return web.json_response({"ok": True})
 
+    # --- Stage B: Team-Channels + Team-Rollen (pro Team in einem Turnier) ---
+
+    async def create_team_discord(request):
+        """Team-Rollen (wiederverwendbar) + Text/Voice-Channel je (Team,Turnier).
+
+        Body: {tournament_category_id, team_name, member_discord_ids[],
+               leader_discord_id, existing_leader_role_id?, existing_member_role_id?}
+
+        Rollen: existieren existing_*_role_id → wiederverwenden (Team nimmt an
+        weiterem Turnier teil), sonst "[team]-Leader"/"[team]-Member" anlegen.
+        Channels: Text + Voice in der Turnier-Kategorie, NUR für Leader/Member-
+        Rolle (+ EM + Bot) sichtbar; @everyone unsichtbar (kein Leak).
+        Antwort: text_channel_id, voice_channel_id, leader_role_id, member_role_id.
+        Teilzustand wird bei Fehlern in "created" zurückgegeben (kein stiller
+        Orphan — das Backend speichert/räumt ab).
+        """
+        if not _token_ok(request, cfg_json.get("TURNIER_SERVICE_TOKEN")):
+            return web.json_response({"error": "Ungültiger Service-Token"}, status=401)
+
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"error": "Ungültiger JSON-Body"}, status=400)
+        if not isinstance(body, dict):
+            return web.json_response({"error": "Ungültiger JSON-Body"}, status=400)
+
+        category_id = body.get("tournament_category_id")
+        team_name = body.get("team_name")
+        leader_discord_id = body.get("leader_discord_id")
+        member_discord_ids = body.get("member_discord_ids") or []
+        existing_leader = body.get("existing_leader_role_id")
+        existing_member = body.get("existing_member_role_id")
+
+        if not _valid_snowflake(category_id):
+            return web.json_response(
+                {"error": "tournament_category_id muss eine gültige Discord-ID sein"},
+                status=400,
+            )
+        if not isinstance(team_name, str) or not team_name.strip():
+            return web.json_response({"error": "team_name ist Pflicht"}, status=400)
+        if not isinstance(member_discord_ids, list):
+            return web.json_response(
+                {"error": "member_discord_ids muss eine Liste sein"}, status=400
+            )
+        for value in [leader_discord_id, existing_leader, existing_member, *member_discord_ids]:
+            if value is not None and not _valid_snowflake(value):
+                return web.json_response(
+                    {"error": f"Ungültige Discord-ID: {value!r}"}, status=400
+                )
+
+        guild = bot.get_guild(cfg_json.get("GUILD_ID"))
+        if guild is None:
+            return web.json_response({"error": "Guild nicht verfügbar"}, status=503)
+
+        category = guild.get_channel(int(category_id))
+        if category is None or not isinstance(category, discord.CategoryChannel):
+            return web.json_response(
+                {"error": f"Kategorie {category_id} nicht (mehr) vorhanden"}, status=404
+            )
+
+        em_role_id = int(cfg_json.get("TURNIER_EM_ROLE_ID") or DEFAULT_EM_ROLE_ID)
+        em_role = guild.get_role(em_role_id)
+        if em_role is None:
+            return web.json_response(
+                {"error": f"EM-Rolle {em_role_id} nicht auf der Guild gefunden"},
+                status=503,
+            )
+
+        leader_name, member_name = _team_role_names(team_name)
+        created = {}
+
+        try:
+            # Rollen: wiederverwenden (Team in 2.+ Turnier) ODER neu anlegen.
+            leader_role = (
+                guild.get_role(int(existing_leader)) if existing_leader else None
+            )
+            member_role = (
+                guild.get_role(int(existing_member)) if existing_member else None
+            )
+            if leader_role is None:
+                leader_role = await guild.create_role(
+                    name=leader_name, mentionable=False, hoist=False,
+                    reason=f"Turnier-Automatisierung: Team-Leader-Rolle {team_name}",
+                )
+            if member_role is None:
+                member_role = await guild.create_role(
+                    name=member_name, mentionable=False, hoist=False,
+                    reason=f"Turnier-Automatisierung: Team-Member-Rolle {team_name}",
+                )
+            created["leader_role_id"] = str(leader_role.id)
+            created["member_role_id"] = str(member_role.id)
+
+            full = _full_access_overwrite()
+            visible = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, connect=True, speak=True,
+                read_message_history=True,
+            )
+            # @everyone unsichtbar — kein Leak; nur Leader/Member-Rolle + EM + Bot.
+            overwrites = {
+                em_role: full,
+                guild.me: full,
+                guild.default_role: discord.PermissionOverwrite(view_channel=False),
+                leader_role: visible,
+                member_role: visible,
+            }
+
+            text_name = (TEAM_TEXT_CHANNEL_PREFIX + team_name.strip())[:MAX_CHANNEL_NAME]
+            text = await guild.create_text_channel(
+                text_name, category=category, overwrites=overwrites,
+                reason=f"Turnier-Automatisierung: Team-Textchannel {team_name}",
+            )
+            created["text_channel_id"] = str(text.id)
+
+            voice_name = (TEAM_VOICE_CHANNEL_PREFIX + team_name.strip())[:MAX_CHANNEL_NAME]
+            voice = await guild.create_voice_channel(
+                voice_name, category=category, overwrites=overwrites,
+                reason=f"Turnier-Automatisierung: Team-Voicechannel {team_name}",
+            )
+            created["voice_channel_id"] = str(voice.id)
+
+            # Rollen an aktuelle Mitglieder vergeben (best effort je Member —
+            # ein fehlendes Guild-Mitglied darf die Provisionierung nicht killen).
+            async def _grant(discord_id, role):
+                m = guild.get_member(int(discord_id))
+                if m is None:
+                    try:
+                        m = await guild.fetch_member(int(discord_id))
+                    except discord.HTTPException:
+                        return
+                try:
+                    await m.add_roles(role, reason="Turnier-Automatisierung: Team-Rolle")
+                except discord.HTTPException:
+                    pass
+
+            if leader_discord_id:
+                await _grant(leader_discord_id, leader_role)
+            for mid in member_discord_ids:
+                await _grant(mid, member_role)
+        except discord.Forbidden:
+            return web.json_response(
+                {"error": "Discord verweigert die Aktion (fehlende Bot-Rechte)",
+                 "created": created},
+                status=502,
+            )
+        except discord.HTTPException as exc:
+            return web.json_response(
+                {"error": f"Discord-Fehler: {exc}", "created": created}, status=502
+            )
+
+        return web.json_response(created, status=201)
+
+    async def delete_team_discord(request):
+        """Team-Channels löschen; Team-Rollen NUR wenn delete_roles=true.
+
+        Body: {text_channel_id, voice_channel_id, leader_role_id?,
+               member_role_id?, delete_roles: bool}
+        Löscht AUSSCHLIESSLICH die übergebenen IDs (Guild-Scope, 404-tolerant).
+        Rollen werden nur gelöscht, wenn delete_roles=true — das Backend
+        entscheidet anhand der Wiederverwendung (Teamname noch in einem
+        nicht-abgeschlossenen Turnier aktiv → Rollen behalten).
+        """
+        if not _token_ok(request, cfg_json.get("TURNIER_SERVICE_TOKEN")):
+            return web.json_response({"error": "Ungültiger Service-Token"}, status=401)
+
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"error": "Ungültiger JSON-Body"}, status=400)
+        if not isinstance(body, dict):
+            return web.json_response({"error": "Ungültiger JSON-Body"}, status=400)
+
+        text_channel_id = body.get("text_channel_id")
+        voice_channel_id = body.get("voice_channel_id")
+        leader_role_id = body.get("leader_role_id")
+        member_role_id = body.get("member_role_id")
+        delete_roles = bool(body.get("delete_roles"))
+        for value in [text_channel_id, voice_channel_id, leader_role_id, member_role_id]:
+            if value is not None and not _valid_snowflake(value):
+                return web.json_response(
+                    {"error": f"Ungültige Discord-ID: {value!r}"}, status=400
+                )
+
+        guild = bot.get_guild(cfg_json.get("GUILD_ID"))
+        if guild is None:
+            return web.json_response({"error": "Guild nicht verfügbar"}, status=503)
+
+        deleted, missing, errors = [], [], []
+
+        async def delete_channel_like(snowflake, label):
+            channel = guild.get_channel(int(snowflake))
+            if channel is None:
+                try:
+                    channel = await bot.fetch_channel(int(snowflake))
+                except discord.NotFound:
+                    missing.append(snowflake)
+                    return
+                except discord.HTTPException as exc:
+                    errors.append(f"{label} {snowflake}: {exc}")
+                    return
+            if getattr(channel, "guild", None) is None or channel.guild.id != guild.id:
+                errors.append(f"{label} {snowflake}: gehört nicht zur NiceCom-Guild")
+                return
+            try:
+                await channel.delete(reason="Turnier-Automatisierung: Team-Cleanup")
+                deleted.append(snowflake)
+            except discord.NotFound:
+                missing.append(snowflake)
+            except discord.Forbidden:
+                errors.append(f"{label} {snowflake}: fehlende Rechte")
+            except discord.HTTPException as exc:
+                errors.append(f"{label} {snowflake}: {exc}")
+
+        async def delete_role_scoped(snowflake):
+            # guild.get_role ist per Konstruktion auf DIESE Guild beschränkt.
+            role = guild.get_role(int(snowflake))
+            if role is None:
+                missing.append(snowflake)
+                return
+            try:
+                await role.delete(reason="Turnier-Automatisierung: Team-Cleanup")
+                deleted.append(snowflake)
+            except discord.NotFound:
+                missing.append(snowflake)
+            except discord.Forbidden:
+                errors.append(f"Rolle {snowflake}: fehlende Rechte")
+            except discord.HTTPException as exc:
+                errors.append(f"Rolle {snowflake}: {exc}")
+
+        if text_channel_id:
+            await delete_channel_like(text_channel_id, "Team-Textchannel")
+        if voice_channel_id:
+            await delete_channel_like(voice_channel_id, "Team-Voicechannel")
+        if delete_roles:
+            if leader_role_id:
+                await delete_role_scoped(leader_role_id)
+            if member_role_id:
+                await delete_role_scoped(member_role_id)
+
+        payload = {"deleted": deleted, "missing": missing}
+        if errors:
+            payload["errors"] = errors
+            return web.json_response(payload, status=502)
+        return web.json_response(payload)
+
+    # --- Stage B: Team-Rollen-Zuweisung (Mitglied-Add/Remove im Team) -------
+
+    _TEAM_GUARD_ERROR = (
+        "Rolle {role_id} ist keine Team-Rolle "
+        f"(Name muss auf '{TEAM_ROLE_LEADER_SUFFIX}' oder "
+        f"'{TEAM_ROLE_MEMBER_SUFFIX}' enden) — Zuweisung/Entzug verweigert"
+    )
+
+    async def assign_team_role(request):
+        """Team-Rolle vergeben (idempotent — add_roles doppelt ist ok)."""
+        role, member, error = await _resolve_role_member(
+            request, role_guard=_is_team_role, guard_error=_TEAM_GUARD_ERROR
+        )
+        if error is not None:
+            return error
+        try:
+            await member.add_roles(role, reason="Turnier-Automatisierung: Team-Rolle")
+        except discord.NotFound:
+            return web.json_response(
+                {"error": "Rolle oder Member wurde zwischenzeitlich entfernt"}, status=404
+            )
+        except discord.Forbidden:
+            return web.json_response(
+                {"error": "Discord verweigert die Aktion (fehlende Bot-Rechte)"}, status=502
+            )
+        except discord.HTTPException as exc:
+            return web.json_response({"error": f"Discord-Fehler: {exc}"}, status=502)
+        return web.json_response({"ok": True})
+
+    async def remove_team_role(request):
+        """Team-Rolle entziehen (idempotent — remove ohne Rolle ist ok)."""
+        role, member, error = await _resolve_role_member(
+            request, role_guard=_is_team_role, guard_error=_TEAM_GUARD_ERROR
+        )
+        if error is not None:
+            return error
+        try:
+            await member.remove_roles(role, reason="Turnier-Automatisierung: Team-Austritt")
+        except discord.NotFound:
+            return web.json_response(
+                {"error": "Rolle oder Member wurde zwischenzeitlich entfernt"}, status=404
+            )
+        except discord.Forbidden:
+            return web.json_response(
+                {"error": "Discord verweigert die Aktion (fehlende Bot-Rechte)"}, status=502
+            )
+        except discord.HTTPException as exc:
+            return web.json_response({"error": f"Discord-Fehler: {exc}"}, status=502)
+        return web.json_response({"ok": True})
+
     app = web.Application()
     app.router.add_get("/internal/members/{discord_id}/roles", member_roles)
     app.router.add_post("/internal/tournaments/discord", create_tournament_discord)
@@ -539,6 +897,11 @@ def create_service_app(cfg_json, bot):
     app.router.add_post(
         "/internal/tournaments/discord/role-remove", remove_participant_role
     )
+    # Stage B: Team-Channels + Team-Rollen
+    app.router.add_post("/internal/teams/discord", create_team_discord)
+    app.router.add_delete("/internal/teams/discord", delete_team_discord)
+    app.router.add_post("/internal/teams/discord/role-assign", assign_team_role)
+    app.router.add_post("/internal/teams/discord/role-remove", remove_team_role)
     return app
 
 

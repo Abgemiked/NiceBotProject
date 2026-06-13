@@ -1074,6 +1074,66 @@ def create_service_app(cfg_json, bot):
                 )
         return role, member, None
 
+    async def send_direct_message(request):
+        """Generische Discord-DM an einen User (Batch 3, Nachtrag 4).
+
+        Body: {"discord_id": "…", "message": "…"}
+        Für die Beitritts-Anfrage-Benachrichtigung an Teamleader. allowed_mentions
+        =none (User-Input darf nie pingen, Audit M2). 404/Forbidden-tolerant:
+        hat der User DMs zu (Forbidden) oder ist er kein Guild-Mitglied (404),
+        wird das als delivered=false gemeldet, NICHT als harter Fehler — das
+        Backend behandelt die DM als best effort.
+
+            200 → {"ok": true, "delivered": true}    (DM zugestellt)
+            200 → {"ok": true, "delivered": false}   (DMs zu / Member weg)
+            400 → ungültiger Body / fehlende Felder
+            401 → falscher Service-Token
+            503 → Guild/Discord nicht erreichbar
+        """
+        if not _token_ok(request, cfg_json.get("TURNIER_SERVICE_TOKEN")):
+            return web.json_response({"error": "Ungültiger Service-Token"}, status=401)
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"error": "Ungültiger JSON-Body"}, status=400)
+        if not isinstance(body, dict):
+            return web.json_response({"error": "Ungültiger JSON-Body"}, status=400)
+
+        discord_id = body.get("discord_id")
+        message = body.get("message")
+        if not _valid_snowflake(discord_id):
+            return web.json_response(
+                {"error": "discord_id muss eine gültige Discord-ID sein"}, status=400
+            )
+        if not isinstance(message, str) or not message.strip():
+            return web.json_response({"error": "message ist Pflicht"}, status=400)
+        message = message[:2000]  # Discord-Nachrichten-Limit
+
+        guild = bot.get_guild(cfg_json.get("GUILD_ID"))
+        if guild is None:
+            return web.json_response({"error": "Guild nicht verfügbar"}, status=503)
+
+        member = guild.get_member(int(discord_id))
+        if member is None:
+            try:
+                member = await guild.fetch_member(int(discord_id))
+            except discord.NotFound:
+                # kein Guild-Mitglied (mehr) → keine DM, aber kein harter Fehler
+                return web.json_response({"ok": True, "delivered": False})
+            except discord.HTTPException:
+                return web.json_response({"error": "Discord nicht erreichbar"}, status=503)
+
+        try:
+            await member.send(
+                message, allowed_mentions=discord.AllowedMentions.none()
+            )
+        except discord.Forbidden:
+            # User hat DMs deaktiviert → tolerant (best effort)
+            return web.json_response({"ok": True, "delivered": False})
+        except discord.HTTPException as exc:
+            return web.json_response({"error": f"Discord-Fehler: {exc}"}, status=502)
+        return web.json_response({"ok": True, "delivered": True})
+
     async def assign_teamleader_role(request):
         """Globale Teamleader-Rolle vergeben (idempotent)."""
         role, member, error = await _resolve_teamleader_member(request)
@@ -1134,6 +1194,8 @@ def create_service_app(cfg_json, bot):
     app.router.add_post(
         "/internal/teamleader-role/remove", remove_teamleader_role
     )
+    # Batch 3: generische DM (Beitritts-Anfrage-Benachrichtigung an Leader)
+    app.router.add_post("/internal/dm", send_direct_message)
     return app
 
 

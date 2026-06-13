@@ -182,10 +182,22 @@ def test_gated_commands():
         run(adm.caster_info_handler(CFG, inter4, "Cup"))
         check("caster-info ohne Caster-Rolle → Forbidden", inter4.content == adm.FORBIDDEN_CASTER)
 
-        # caster-info mit Caster-Rolle → M6-Platzhalter
+        # caster-info mit Caster-Rolle → personalisierter Deeplink /caster/<slug>
+        called["deeplink"] = 0
+        captured = {}
+
+        async def fake_deeplink_caster(base_url, token, did, dname, redirect_path=None):
+            called["deeplink"] += 1
+            captured["redirect_path"] = redirect_path
+            return "https://turnier.abgemiked.de/verknuepfen/abc"
+
+        adm.tc.request_deeplink = fake_deeplink_caster
         inter5 = FakeInteraction(FakeMember([CASTER_ROLE]))
         run(adm.caster_info_handler(CFG, inter5, "Cup"))
-        check("caster-info mit Rolle → M6-Hinweis", "M6" in inter5.content)
+        check("caster-info mit Rolle → Deeplink erzeugt", called["deeplink"] == 1)
+        check("caster-info Deeplink-Ziel /caster/cup", captured.get("redirect_path") == "/caster/cup")
+        check("caster-info: Caster-Seiten-Hinweis im Text", "Caster-Seite" in inter5.content)
+        adm.tc.request_deeplink = fake_deeplink
     finally:
         adm.tc.request_deeplink = orig_dl
         adm.tc.fetch_tournament = orig_ft

@@ -132,12 +132,17 @@ async def caster_info_handler(cfg_json, interaction, turnier):
     t = await _resolve_tournament(cfg_json, interaction, turnier)
     if not t:
         return
-    # Caster-Seite kommt mit M6 — bis dahin Info + Link zur öffentlichen Seite.
-    url = tc.public_tournament_url(cfg_json, t["slug"])
+    # M6b: personalisierter Login-Deeplink auf die geschützte Caster-Infoseite
+    # (/caster/<slug> — Spieler + Ranks beider Teams je anstehendem Spiel).
+    # Die Seite ist nicht öffentlich; der Login stellt die Caster-Rolle sicher.
+    url = await _deeplink_or_error(cfg_json, interaction, f"/caster/{t['slug']}")
+    if not url:
+        return
     await interaction.edit_original_response(
         content=(
             f"**Caster-Info: „{t['name']}“**\n"
-            "Die dedizierte Caster-Seite (Overlays, Match-Details) folgt mit **M6**.\n"
-            f"Bis dahin: öffentliche Turnierseite → {url}"
+            "Caster-Seite öffnen (Spieler & Ranks beider Teams, anstehende Spiele):\n"
+            f"{url}\n"
+            "-# 15 Minuten gültig, nur einmal verwendbar."
         )
     )

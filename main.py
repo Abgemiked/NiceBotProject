@@ -53,6 +53,15 @@ _service_api_started = False
 @bot.event
 async def on_ready():
     global _statistics_loop_started, _service_api_started
+    # Guild-scoped Sync: registriert die Slash-Commands SOFORT + zuverlässig im
+    # NiceCom-Guild (globaler Sync ist träge/cache-behaftet, Clients zeigen sonst
+    # veraltete Listen → nur /verknüpfen sichtbar). Globaler Sync zusätzlich für DMs.
+    try:
+        guild = discord.Object(id=cfg_json['GUILD_ID'])
+        tree.copy_global_to(guild=guild)
+        await tree.sync(guild=guild)
+    except Exception as e:
+        print(f"Guild-Sync fehlgeschlagen: {e}")
     await tree.sync()
     print("Ready!")
     if not _statistics_loop_started:

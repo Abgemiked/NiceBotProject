@@ -37,6 +37,15 @@ def get_config(user=Depends(require_access)):
     # Nur bekannte Felder zurückgeben; Werte für Secrets maskieren wenn nötig.
     values = {f["key"]: raw.get(f["key"]) for f in fields}
     values = mask_secrets(values, tier)
+    # WICHTIG: Discord-Snowflake-IDs als STRINGS ausliefern. Als JSON-Zahl
+    # verlieren IDs > 2^53 im Browser an Präzision und matchen dann die
+    # (exakten String-)Dropdown-Optionen nicht mehr → Felder wirken "nicht gesetzt".
+    for f in fields:
+        v = values.get(f["key"])
+        if f.get("type") == "id" and v is not None:
+            values[f["key"]] = str(v)
+        elif f.get("type") == "idlist" and isinstance(v, list):
+            values[f["key"]] = [str(x) for x in v]
     return {
         "fields": fields,
         "values": values,

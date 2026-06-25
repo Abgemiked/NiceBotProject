@@ -1197,9 +1197,38 @@ def create_service_app(cfg_json, bot):
             "ignored_role_members": ignored,
         })
 
+    async def guild_channels(request):
+        """Liste der Guild-Channels (id, name, type) für Auswahl-Dropdowns im Web-Tool."""
+        if not _token_ok(request, cfg_json.get("TURNIER_SERVICE_TOKEN")):
+            return web.json_response({"error": "Ungültiger Service-Token"}, status=401)
+        guild = bot.get_guild(cfg_json.get("GUILD_ID"))
+        if guild is None:
+            return web.json_response({"error": "Guild nicht verfügbar"}, status=503)
+        out = [
+            {"id": str(c.id), "name": c.name, "type": c.type.name,
+             "category": c.category.name if getattr(c, "category", None) else None}
+            for c in guild.channels
+        ]
+        return web.json_response({"channels": out})
+
+    async def guild_roles(request):
+        """Liste der Guild-Rollen (id, name) für Auswahl-Dropdowns (ohne @everyone)."""
+        if not _token_ok(request, cfg_json.get("TURNIER_SERVICE_TOKEN")):
+            return web.json_response({"error": "Ungültiger Service-Token"}, status=401)
+        guild = bot.get_guild(cfg_json.get("GUILD_ID"))
+        if guild is None:
+            return web.json_response({"error": "Guild nicht verfügbar"}, status=503)
+        out = [
+            {"id": str(r.id), "name": r.name}
+            for r in guild.roles if r != guild.default_role
+        ]
+        return web.json_response({"roles": out})
+
     app = web.Application()
     app.router.add_get("/internal/members/{discord_id}/roles", member_roles)
     app.router.add_get("/internal/stats", server_stats)
+    app.router.add_get("/internal/channels", guild_channels)
+    app.router.add_get("/internal/roles", guild_roles)
     app.router.add_post("/internal/tournaments/discord", create_tournament_discord)
     app.router.add_delete("/internal/tournaments/discord", delete_tournament_discord)
     app.router.add_post(

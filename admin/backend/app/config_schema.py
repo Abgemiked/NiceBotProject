@@ -15,23 +15,26 @@ _ID_RE = re.compile(r"^\d{5,25}$")
 _HOST_RE = re.compile(r"^(?=.{1,253}$)([a-z0-9](-?[a-z0-9])*\.)+[a-z]{2,}$")
 
 
-# Feld-Definitionen: key, group, type, label. type ∈ {id, idlist, string, hostlist}.
+# Feld-Definitionen: key, group, type (Validierung), kind (UI-Rendering), label.
+# type ∈ {id, idlist, string, hostlist}; kind ∈ {channel, voice, category, role,
+# keyword, hostlist, idlist} steuert, ob das Frontend ein Auswahl-Dropdown
+# (aus echten Guild-Daten) oder ein Textfeld zeigt.
 FIELDS = [
-    {"key": "ALLGEMEIN_ID", "group": "Channels", "type": "id", "label": "Allgemein-Channel"},
-    {"key": "SPAM_CHANNEL_ID", "group": "Channels", "type": "id", "label": "Spam-Channel"},
-    {"key": "GIF_ID", "group": "Channels", "type": "id", "label": "GIF-Channel"},
-    {"key": "LOG_CHANNEL_ID", "group": "Channels", "type": "id", "label": "Log-Channel"},
-    {"key": "LEAVE_CHANNEL_ID", "group": "Channels", "type": "id", "label": "Leave-Channel"},
-    {"key": "MUSIC_CHANNEL_ID", "group": "Channels", "type": "id", "label": "Musik-Channel"},
-    {"key": "PICTURE_CHANNEL_ID", "group": "Channels", "type": "id", "label": "Bilder-Channel"},
-    {"key": "TEMP_CHANNEL_ID", "group": "Channels", "type": "id", "label": "Temp-Voice-Channel"},
-    {"key": "TEMP_CATEGORY_ID", "group": "Channels", "type": "id", "label": "Temp-Kategorie"},
-    {"key": "BOT_CHANNEL_ID", "group": "Channels", "type": "id", "label": "Bot-Channel"},
-    {"key": "SPAM_KEYWORD", "group": "Filter", "type": "string", "label": "Spam-Keyword"},
-    {"key": "GIF_ALLOWED_DOMAINS", "group": "Filter", "type": "hostlist", "label": "Erlaubte GIF-Domains"},
-    {"key": "BLOCKED_CHANNEL_IDS", "group": "Filter", "type": "idlist", "label": "Blockierte Channels"},
-    {"key": "ALLOWED_ROLE_IDS", "group": "Rollen", "type": "id", "label": "Admin-Rolle"},
-    {"key": "IGNORED_ROLE_ID", "group": "Rollen", "type": "id", "label": "Ignorierte Rolle (Statistik)"},
+    {"key": "ALLGEMEIN_ID", "group": "Channels", "type": "id", "kind": "channel", "label": "Allgemein-Channel"},
+    {"key": "SPAM_CHANNEL_ID", "group": "Channels", "type": "id", "kind": "channel", "label": "Spam-Channel"},
+    {"key": "GIF_ID", "group": "Channels", "type": "id", "kind": "channel", "label": "GIF-Channel"},
+    {"key": "LOG_CHANNEL_ID", "group": "Channels", "type": "id", "kind": "channel", "label": "Log-Channel"},
+    {"key": "LEAVE_CHANNEL_ID", "group": "Channels", "type": "id", "kind": "channel", "label": "Leave-Channel"},
+    {"key": "MUSIC_CHANNEL_ID", "group": "Channels", "type": "id", "kind": "channel", "label": "Musik-Channel"},
+    {"key": "PICTURE_CHANNEL_ID", "group": "Channels", "type": "id", "kind": "channel", "label": "Bilder-Channel"},
+    {"key": "TEMP_CHANNEL_ID", "group": "Channels", "type": "id", "kind": "voice", "label": "Temp-Voice-Channel"},
+    {"key": "TEMP_CATEGORY_ID", "group": "Channels", "type": "id", "kind": "category", "label": "Temp-Kategorie"},
+    {"key": "BOT_CHANNEL_ID", "group": "Channels", "type": "id", "kind": "channel", "label": "Bot-Channel"},
+    {"key": "SPAM_KEYWORD", "group": "Filter", "type": "string", "kind": "keyword", "label": "Spam-Keyword"},
+    {"key": "GIF_ALLOWED_DOMAINS", "group": "Filter", "type": "hostlist", "kind": "hostlist", "label": "Erlaubte GIF-Domains"},
+    {"key": "BLOCKED_CHANNEL_IDS", "group": "Filter", "type": "idlist", "kind": "idlist", "label": "Blockierte Channels"},
+    {"key": "ALLOWED_ROLE_IDS", "group": "Rollen", "type": "id", "kind": "role", "label": "Admin-Rolle"},
+    {"key": "IGNORED_ROLE_ID", "group": "Rollen", "type": "id", "kind": "role", "label": "Ignorierte Rolle (Statistik)"},
 ]
 
 # Schreib-Whitelist: nur diese Keys dürfen über das Web geändert werden.

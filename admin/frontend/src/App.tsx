@@ -1,15 +1,20 @@
 import { useEffect, useState } from "react";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  NavLink,
+  Outlet,
+} from "react-router-dom";
 import { fetchMe, logout, type Me } from "./api";
 import ConfigPage from "./ConfigPage";
 import LevelPage from "./LevelPage";
 import AuditPage from "./AuditPage";
 
-type View = "config" | "levels" | "logs";
-
 export default function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<View>("config");
 
   useEffect(() => {
     fetchMe()
@@ -18,17 +23,13 @@ export default function App() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) {
-    return <Centered>Lade …</Centered>;
-  }
+  if (loading) return <Centered>Lade …</Centered>;
 
   if (!me) {
     return (
       <Centered>
-        <h1 className="text-2xl font-semibold mb-2">nicebot — Verwaltung</h1>
-        <p className="text-slate-400 mb-6">
-          Anmeldung über Discord erforderlich.
-        </p>
+        <h1 className="mb-2 text-2xl font-semibold">nicebot — Verwaltung</h1>
+        <p className="mb-6 text-slate-400">Anmeldung über Discord erforderlich.</p>
         <a
           href="/api/auth/login"
           className="rounded-lg bg-indigo-600 px-5 py-2.5 font-medium text-white hover:bg-indigo-500"
@@ -39,9 +40,30 @@ export default function App() {
     );
   }
 
-  const p = me.permissions;
+  const fullAdmin = me.permissions.tier === "full_admin";
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route element={<Layout me={me} />}>
+          <Route index element={<Navigate to="/konfiguration" replace />} />
+          <Route path="konfiguration" element={<ConfigPage />} />
+          <Route path="level" element={<LevelPage canEdit={fullAdmin} />} />
+          <Route path="logs" element={<AuditPage />} />
+          <Route path="*" element={<Navigate to="/konfiguration" replace />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+function Layout({ me }: { me: Me }) {
   const tierLabel =
-    p.tier === "full_admin" ? "Voll-Admin" : p.tier === "dc_mod" ? "DC-Mod" : "—";
+    me.permissions.tier === "full_admin"
+      ? "Voll-Admin"
+      : me.permissions.tier === "dc_mod"
+        ? "DC-Mod"
+        : "—";
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -49,9 +71,9 @@ export default function App() {
         <div className="flex items-center gap-6">
           <h1 className="text-lg font-semibold">nicebot — Verwaltung</h1>
           <nav className="flex gap-1 text-sm">
-            <NavBtn label="Konfiguration" active={view === "config"} onClick={() => setView("config")} />
-            <NavBtn label="Level & Ränge" active={view === "levels"} onClick={() => setView("levels")} />
-            <NavBtn label="Logs" active={view === "logs"} onClick={() => setView("logs")} />
+            <Tab to="/konfiguration" label="Konfiguration" />
+            <Tab to="/level" label="Level & Ränge" />
+            <Tab to="/logs" label="Logs" />
           </nav>
         </div>
         <div className="flex items-center gap-4 text-sm">
@@ -59,20 +81,32 @@ export default function App() {
             {me.username} · <span className="text-indigo-400">{tierLabel}</span>
           </span>
           <button
-            onClick={() => logout().then(() => location.reload())}
+            onClick={() => logout().then(() => location.assign("/"))}
             className="rounded-md border border-slate-700 px-3 py-1 hover:bg-slate-800"
           >
             Abmelden
           </button>
         </div>
       </header>
-
-      <main className="mx-auto max-w-3xl px-6 py-10">
-        {view === "config" && <ConfigPage />}
-        {view === "levels" && <LevelPage canEdit={p.tier === "full_admin"} />}
-        {view === "logs" && <AuditPage />}
+      <main className="mx-auto max-w-4xl px-6 py-10">
+        <Outlet />
       </main>
     </div>
+  );
+}
+
+function Tab({ to, label }: { to: string; label: string }) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        `rounded-md px-3 py-1 ${
+          isActive ? "bg-slate-800 text-slate-100" : "text-slate-400 hover:text-slate-200"
+        }`
+      }
+    >
+      {label}
+    </NavLink>
   );
 }
 
@@ -81,26 +115,5 @@ function Centered({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-950 px-6 text-center text-slate-100">
       {children}
     </div>
-  );
-}
-
-function NavBtn({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-md px-3 py-1 ${
-        active ? "bg-slate-800 text-slate-100" : "text-slate-400 hover:text-slate-200"
-      }`}
-    >
-      {label}
-    </button>
   );
 }

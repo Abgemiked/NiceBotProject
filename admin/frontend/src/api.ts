@@ -23,6 +23,32 @@ export async function logout(): Promise<void> {
   await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
 }
 
+// --- Discord-Stammdaten für Dropdowns ---
+
+export interface DiscordChannel {
+  id: string;
+  name: string;
+  type: string; // text, voice, category, …
+  category: string | null;
+}
+
+export interface DiscordRole {
+  id: string;
+  name: string;
+}
+
+export async function fetchChannels(): Promise<DiscordChannel[]> {
+  const res = await fetch("/api/discord/channels", { credentials: "same-origin" });
+  if (!res.ok) return []; // Bot evtl. weg → Felder fallen auf Texteingabe zurück
+  return (await res.json()).channels ?? [];
+}
+
+export async function fetchRoles(): Promise<DiscordRole[]> {
+  const res = await fetch("/api/discord/roles", { credentials: "same-origin" });
+  if (!res.ok) return [];
+  return (await res.json()).roles ?? [];
+}
+
 // --- Audit-Log & Statistiken (M5 + M4) ---
 
 export interface AuditEvent {
@@ -77,6 +103,7 @@ export interface ConfigField {
   key: string;
   group: string;
   type: "id" | "idlist" | "string" | "hostlist" | "secret";
+  kind?: "channel" | "voice" | "category" | "role" | "keyword" | "hostlist" | "idlist";
   label: string;
   secret: boolean;
   editable: boolean;

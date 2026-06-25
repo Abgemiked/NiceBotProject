@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   fetchConfig,
+  fetchChannels,
+  fetchRoles,
   saveConfig,
   type ConfigField,
   type ConfigResponse,
+  type DiscordChannel,
+  type DiscordRole,
 } from "./api";
 
 const MASK = "••••••••";
+const GROUP_ORDER = ["Channels", "Filter", "Rollen", "Secrets"];
 
-/** Wandelt einen Feldwert in die Anzeige-/Editierform (string) um. */
 function toText(field: ConfigField, value: unknown): string {
   if (value === null || value === undefined) return "";
   if (field.type === "idlist" || field.type === "hostlist") {
@@ -17,8 +21,6 @@ function toText(field: ConfigField, value: unknown): string {
   return String(value);
 }
 
-/** Parst die Editierform zurück in den API-Wert. Listen tolerant trennen:
- *  Komma, Semikolon, Leerzeichen, Zeilenumbruch und Slash. */
 function fromText(field: ConfigField, text: string): unknown {
   if (field.type === "idlist" || field.type === "hostlist") {
     return text
@@ -29,32 +31,18 @@ function fromText(field: ConfigField, text: string): unknown {
   return text.trim();
 }
 
-/** Platzhalter-Beispiel je Feldtyp. */
-function placeholderFor(field: ConfigField): string {
-  switch (field.type) {
-    case "hostlist":
-      return "tenor.com, klipy.com, giphy.com";
-    case "idlist":
-      return "123456789012345678, 234567890123456789";
-    case "id":
-      return "123456789012345678";
-    default:
-      return "";
-  }
-}
-
-/** Hinweistext für Listenfelder. */
-function hintFor(field: ConfigField): string | null {
-  if (field.type === "hostlist")
-    return "Vollständige Hostnamen, getrennt durch Komma, Leerzeichen oder Zeilenumbruch.";
-  if (field.type === "idlist")
-    return "Discord-IDs, getrennt durch Komma, Leerzeichen oder Zeilenumbruch.";
-  return null;
+function channelsForKind(kind: string | undefined, channels: DiscordChannel[]) {
+  if (kind === "voice") return channels.filter((c) => c.type.includes("voice"));
+  if (kind === "category") return channels.filter((c) => c.type === "category");
+  return channels.filter((c) => ["text", "news", "forum", "announcement"].includes(c.type));
 }
 
 export default function ConfigPage() {
   const [data, setData] = useState<ConfigResponse | null>(null);
+  const [channels, setChannels] = useState<DiscordChannel[]>([]);
+  const [roles, setRoles] = useState<DiscordRole[]>([]);
   const [draft, setDraft] = useState<Record<string, string>>({});
+  const [tab, setTab] = useState("Channels");
   const [status, setStatus] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -70,13 +58,19 @@ export default function ConfigPage() {
       .catch((e) => setStatus({ kind: "err", msg: String(e.message ?? e) }));
   }
 
-  useEffect(load, []);
+  useEffect(() => {
+    load();
+    fetchChannels().then(setChannels).catch(() => setChannels([]));
+    fetchRoles().then(setRoles).catch(() => setRoles([]));
+  }, []);
 
   const groups = useMemo(() => {
     const g: Record<string, ConfigField[]> = {};
     for (const f of data?.fields ?? []) (g[f.group] ??= []).push(f);
     return g;
   }, [data]);
+
+  const tabs = GROUP_ORDER.filter((g) => groups[g]?.length);
 
   if (!data) {
     return <p className="text-sm text-slate-400">{status?.msg ?? "Lade Konfiguration …"}</p>;
@@ -87,7 +81,6 @@ export default function ConfigPage() {
     setSaving(true);
     setStatus(null);
     setFieldErrors({});
-    // Nur geänderte, editierbare Felder senden.
     const updates: Record<string, unknown> = {};
     for (const f of data.fields) {
       if (!f.editable) continue;
@@ -111,6 +104,8 @@ export default function ConfigPage() {
       setStatus({ kind: "err", msg: res.error ?? "Speichern fehlgeschlagen." });
     }
   }
+
+  const activeFields = groups[tab] ?? [];
 
   return (
     <div className="space-y-6">
@@ -137,58 +132,152 @@ export default function ConfigPage() {
         </div>
       )}
 
-      {Object.entries(groups).map(([group, fields]) => (
-        <section key={group} className="rounded-xl border border-slate-800 p-5">
-          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
-            {group}
-          </h3>
-          <div className="space-y-3">
-            {fields.map((f) => {
-              const masked = f.secret && !data.can_view_secrets;
-              const value = masked ? MASK : draft[f.key] ?? "";
-              const multiline = f.type === "idlist" || f.type === "hostlist";
-              return (
-                <div key={f.key}>
-                  <label className="mb-1 flex items-center justify-between text-sm">
-                    <span>{f.label}</span>
-                    <span className="font-mono text-xs text-slate-600">{f.key}</span>
-                  </label>
-                  {multiline ? (
-                    <textarea
-                      rows={2}
-                      value={value}
-                      disabled={!f.editable}
-                      placeholder={placeholderFor(f)}
-                      onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
-                      className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm placeholder:text-slate-600 disabled:opacity-60"
-                    />
-                  ) : (
-                    <input
-                      type="text"
-                      value={value}
-                      disabled={!f.editable}
-                      placeholder={placeholderFor(f)}
-                      onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
-                      className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm placeholder:text-slate-600 disabled:opacity-60"
-                    />
-                  )}
-                  {hintFor(f) && !fieldErrors[f.key] && (
-                    <p className="mt-1 text-xs text-slate-500">{hintFor(f)}</p>
-                  )}
-                  {data.restart_required_keys.includes(f.key) && (
-                    <p className="mt-1 text-xs text-amber-400">
-                      Änderung wirkt erst nach Bot-Neustart.
-                    </p>
-                  )}
-                  {fieldErrors[f.key] && (
-                    <p className="mt-1 text-xs text-red-400">{fieldErrors[f.key]}</p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      ))}
+      {/* Gruppen-Tabs */}
+      <div className="flex gap-1 border-b border-slate-800">
+        {tabs.map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`-mb-px border-b-2 px-4 py-2 text-sm ${
+              tab === t
+                ? "border-indigo-500 text-slate-100"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        {activeFields.map((f) => (
+          <Field
+            key={f.key}
+            field={f}
+            value={draft[f.key] ?? ""}
+            error={fieldErrors[f.key]}
+            restart={data.restart_required_keys.includes(f.key)}
+            canViewSecrets={data.can_view_secrets}
+            channels={channels}
+            roles={roles}
+            onChange={(v) => setDraft({ ...draft, [f.key]: v })}
+          />
+        ))}
+      </div>
     </div>
+  );
+}
+
+function Field({
+  field,
+  value,
+  error,
+  restart,
+  canViewSecrets,
+  channels,
+  roles,
+  onChange,
+}: {
+  field: ConfigField;
+  value: string;
+  error?: string;
+  restart: boolean;
+  canViewSecrets: boolean;
+  channels: DiscordChannel[];
+  roles: DiscordRole[];
+  onChange: (v: string) => void;
+}) {
+  const masked = field.secret && !canViewSecrets;
+  const kind = field.kind;
+  const isChannel = kind === "channel" || kind === "voice" || kind === "category";
+  const isRole = kind === "role";
+  const multiline = field.type === "idlist" || field.type === "hostlist";
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+      <label className="mb-1.5 flex items-center justify-between">
+        <span className="text-sm font-medium">{field.label}</span>
+        <span className="font-mono text-[10px] text-slate-600">{field.key}</span>
+      </label>
+
+      {masked ? (
+        <input
+          value={MASK}
+          disabled
+          className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm opacity-60"
+        />
+      ) : isChannel && channels.length > 0 ? (
+        <Picker
+          value={value}
+          options={channelsForKind(kind, channels).map((c) => ({ id: c.id, name: "#" + c.name }))}
+          disabled={!field.editable}
+          onChange={onChange}
+        />
+      ) : isRole && roles.length > 0 ? (
+        <Picker
+          value={value}
+          options={roles.map((r) => ({ id: r.id, name: "@" + r.name }))}
+          disabled={!field.editable}
+          onChange={onChange}
+        />
+      ) : multiline ? (
+        <textarea
+          rows={2}
+          value={value}
+          disabled={!field.editable}
+          placeholder={kind === "hostlist" ? "tenor.com, klipy.com, giphy.com" : "123, 456"}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm placeholder:text-slate-600 disabled:opacity-60"
+        />
+      ) : (
+        <input
+          type="text"
+          value={value}
+          disabled={!field.editable}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm disabled:opacity-60"
+        />
+      )}
+
+      {kind === "hostlist" && !error && (
+        <p className="mt-1 text-xs text-slate-500">
+          Mehrere durch Komma, Leerzeichen oder Zeilenumbruch trennen.
+        </p>
+      )}
+      {restart && (
+        <p className="mt-1 text-xs text-amber-400">Änderung wirkt erst nach Bot-Neustart.</p>
+      )}
+      {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
+    </div>
+  );
+}
+
+function Picker({
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  value: string;
+  options: { id: string; name: string }[];
+  disabled: boolean;
+  onChange: (v: string) => void;
+}) {
+  const known = options.some((o) => o.id === value);
+  return (
+    <select
+      value={value}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm disabled:opacity-60"
+    >
+      <option value="">— nicht gesetzt —</option>
+      {options.map((o) => (
+        <option key={o.id} value={o.id}>
+          {o.name}
+        </option>
+      ))}
+      {value && !known && <option value={value}>ID {value} (unbekannt)</option>}
+    </select>
   );
 }

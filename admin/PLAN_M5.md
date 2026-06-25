@@ -38,4 +38,7 @@
 - Tests: 44/44 grün.
 
 ## Deploy
-- Deploy MUSS BEIDE Container neu bauen: nicebot (Bot-Hooks) + nicebot-admin. (nach PASS ausgefüllt)
+- main 9da0c85 → /opt/nicebot, BEIDE Container gebaut/gestartet (nicebot + nicebot-admin).
+- Verifiziert: Bot "Ready!" ohne audit-Fehler; data/audit_log.db angelegt; /internal/stats=449 Mitglieder;
+  Admin /api/health=ok; /api/audit+/api/stats ohne Session=401; interner Test: Admin liest Audit-DB (0 Einträge initial) + Stats via Bot-API.
+- UI-Abnahme offen (Logs-Reiter + Statistik + Event erscheint im Log).

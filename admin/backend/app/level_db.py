@@ -77,9 +77,14 @@ def list_users(search=None, sort="level", direction="desc", page=1, page_size=25
     try:
         total = conn.execute(f"SELECT COUNT(*) AS c FROM users {where}", params).fetchone()["c"]
         # sql_col/sql_dir stammen aus Whitelist → sichere Interpolation.
+        # exp ist der Fortschritt IM aktuellen Level (Reset bei Level-Up), daher
+        # ist die sinnvolle Rangfolge level → exp. Beim Sortieren nach einer
+        # Spalte wird mit exp (gleiche Richtung) als Tiebreaker nachgeordnet,
+        # user_id zuletzt für stabile Reihenfolge.
+        secondary = "" if sql_col == "exp" else f", exp {sql_dir}"
         rows = conn.execute(
             f"SELECT user_id, exp, level, username FROM users {where} "
-            f"ORDER BY {sql_col} {sql_dir}, user_id ASC LIMIT ? OFFSET ?",
+            f"ORDER BY {sql_col} {sql_dir}{secondary}, user_id ASC LIMIT ? OFFSET ?",
             params + [page_size, offset],
         ).fetchall()
     finally:

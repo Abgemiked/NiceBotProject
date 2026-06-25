@@ -110,6 +110,17 @@ async def delete_streamer(name):
     return await _request("DELETE", "/internal/streamers", {"name": name})
 
 
+async def resolve_names(ids):
+    """Löst Discord-IDs zu Anzeigenamen auf (best effort, leeres dict bei Fehler)."""
+    if not ids:
+        return {}
+    try:
+        status, data = await _request("POST", "/internal/resolve-names", {"ids": list(ids)})
+    except BotApiError:
+        return {}
+    return data.get("names", {}) if status == 200 else {}
+
+
 async def fetch_members(search=None, page=1, page_size=25):
     q = []
     if search:

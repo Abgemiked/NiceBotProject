@@ -8,7 +8,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 
 from ..audit_db import log_admin_override
 from ..authz import current_tier_live
-from ..bot_client import BotApiError
+from ..bot_client import BotApiError, resolve_names
 from ..deps import require_access
 from ..level_db import (
     LevelValidationError,
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/levels", tags=["levels"])
 
 
 @router.get("")
-def get_levels(
+async def get_levels(
     user=Depends(require_access),
     search: str | None = Query(default=None, max_length=100),
     sort: str = Query(default="level"),
@@ -31,8 +31,19 @@ def get_levels(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=100),
 ):
-    return list_users(search=search, sort=sort, direction=direction,
-                      page=page, page_size=page_size)
+    result = list_users(search=search, sort=sort, direction=direction,
+                        page=page, page_size=page_size)
+    # Anzeigenamen über die Bot-API anreichern: aktueller Discord-Name bevorzugt,
+    # sonst der gespeicherte Username. Best effort — bei Bot-Fehler bleibt der
+    # gespeicherte Name (die Rangliste funktioniert weiterhin).
+    items = result["items"]
+    names = await resolve_names([u["user_id"] for u in items])
+    if names:
+        for u in items:
+            live = names.get(u["user_id"])
+            if live:
+                u["username"] = live
+    return result
 
 
 @router.get("/{user_id}")

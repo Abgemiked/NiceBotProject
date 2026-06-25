@@ -1278,6 +1278,56 @@ def create_service_app(cfg_json, bot):
             return web.json_response({"error": "Streamer nicht gefunden"}, status=404)
         return web.json_response({"ok": True})
 
+    async def resolve_names(request):
+        """Anzeigenamen für eine Liste von Discord-IDs auflösen (fürs Web-Tool).
+
+        Reihenfolge je ID: Live-Member/User aus dem Cache → einmaliger fetch_user
+        (Backfill in die Level-DB, heilt Altbestände) → nicht enthalten.
+        Body: {"ids": ["123", …]} → {"names": {"123": "name", …}}
+        """
+        if not _token_ok(request, cfg_json.get("TURNIER_SERVICE_TOKEN")):
+            return web.json_response({"error": "Ungültiger Service-Token"}, status=401)
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"error": "Ungültiger JSON-Body"}, status=400)
+        ids = (body or {}).get("ids")
+        if not isinstance(ids, list):
+            return web.json_response({"error": "ids muss eine Liste sein"}, status=400)
+        guild = bot.get_guild(cfg_json.get("GUILD_ID"))
+        out = {}
+        backfill_conn = None
+        for raw in ids[:200]:
+            if not _valid_snowflake(raw):
+                continue
+            uid = int(raw)
+            name = None
+            member = guild.get_member(uid) if guild else None
+            if member is None:
+                member = bot.get_user(uid)
+            if member is not None:
+                name = member.name
+            else:
+                try:
+                    fetched = await bot.fetch_user(uid)
+                    name = fetched.name
+                    if backfill_conn is None:
+                        import database
+                        backfill_conn = database.get_connection()
+                    backfill_conn.execute(
+                        "UPDATE users SET username = ? WHERE user_id = ?", (name, uid)
+                    )
+                except Exception:
+                    name = None
+            if name:
+                out[str(uid)] = name
+        if backfill_conn is not None:
+            try:
+                backfill_conn.commit()
+            except Exception:
+                pass
+        return web.json_response({"names": out})
+
     async def guild_members(request):
         """Paginierte Mitgliederliste mit Rollen (M7)."""
         if not _token_ok(request, cfg_json.get("TURNIER_SERVICE_TOKEN")):
@@ -1317,6 +1367,7 @@ def create_service_app(cfg_json, bot):
     app.router.add_post("/internal/streamers", streamers_create)
     app.router.add_delete("/internal/streamers", streamers_delete)
     app.router.add_get("/internal/guild-members", guild_members)
+    app.router.add_post("/internal/resolve-names", resolve_names)
     app.router.add_post("/internal/tournaments/discord", create_tournament_discord)
     app.router.add_delete("/internal/tournaments/discord", delete_tournament_discord)
     app.router.add_post(

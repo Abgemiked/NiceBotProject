@@ -77,6 +77,21 @@ def test_search_like_wildcards_are_escaped(db):
     assert res["total"] == 1 and res["items"][0]["username"] == "dave_50%"
 
 
+def test_sort_level_tiebreaks_by_exp(tmp_path, monkeypatch):
+    import sqlite3 as _sq
+    path = tmp_path / "tie.db"
+    conn = _sq.connect(path)
+    conn.execute("CREATE TABLE users (user_id INTEGER PRIMARY KEY, exp INTEGER, level INTEGER, username TEXT)")
+    conn.executemany("INSERT INTO users VALUES (?,?,?,?)", [
+        (1, 40, 5, "low"), (2, 90, 5, "high"), (3, 10, 5, "mid_"),
+    ])
+    conn.commit(); conn.close()
+    monkeypatch.setattr(settings, "LEVEL_DB_PATH", str(path))
+    res = level_db.list_users(sort="level", direction="desc")
+    # Gleiches Level → höchste EXP zuerst
+    assert [u["username"] for u in res["items"]] == ["high", "low", "mid_"]
+
+
 def test_injection_sort_does_not_break(db):
     # Bösartiger sort-Wert wird ignoriert, Query läuft normal.
     res = level_db.list_users(sort="username); DROP TABLE users;--")

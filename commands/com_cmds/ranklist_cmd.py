@@ -44,7 +44,8 @@ async def handler(interaction: discord.Interaction):
     guild = interaction.guild
     db = get_connection()
     cursor = db.cursor()
-    cursor.execute('SELECT user_id, exp, level, username FROM users ORDER BY level DESC LIMIT 20')
+    # exp ist der Fortschritt im aktuellen Level → Rangfolge level, dann exp.
+    cursor.execute('SELECT user_id, exp, level, username FROM users ORDER BY level DESC, exp DESC LIMIT 20')
     result = cursor.fetchall()
     embed = discord.Embed(title='Rangliste', color=discord.Color.gold())
     for user_id, exp, level, stored_username in result:

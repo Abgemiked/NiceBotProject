@@ -4,6 +4,19 @@ import { Avatar, BTN_PRIMARY, BTN_SECONDARY, Icon, INPUT, Pager, TABLE_WRAP, TH,
 
 const PAGE_SIZE = 25;
 
+// Spiegelt database.calculate_exp (benötigte EXP fürs nächste Level-Up).
+function calcExp(level: number): number {
+  if (level <= 15) return 100;
+  if (level <= 25) return 125;
+  if (level <= 50) return 250;
+  if (level <= 75) return 375;
+  if (level <= 100) return 500;
+  if (level <= 125) return 625;
+  if (level <= 150) return 750;
+  if (level <= 175) return 875;
+  return 1000;
+}
+
 export default function LevelPage({ canEdit }: { canEdit: boolean }) {
   const [data, setData] = useState<LevelList | null>(null);
   const [search, setSearch] = useState("");
@@ -55,9 +68,9 @@ export default function LevelPage({ canEdit }: { canEdit: boolean }) {
           </thead>
           <tbody>
             {data?.items.map((u, i) => {
-              const need = (u.level + 1) * 1000;
-              const cur = u.exp % need;
-              const pct = Math.max(6, Math.round((cur / need) * 100));
+              const need = calcExp(u.level);
+              const cur = Math.min(u.exp, need);
+              const pct = Math.max(4, Math.min(100, Math.round((cur / need) * 100)));
               return (
                 <tr key={u.user_id} className="border-t border-[#201a34] hover:bg-hover">
                   <td className="px-4 py-3 font-mono text-[13px] text-faint">{startRank + i + 1}</td>
@@ -65,7 +78,7 @@ export default function LevelPage({ canEdit }: { canEdit: boolean }) {
                     <div className="flex items-center gap-3">
                       <Avatar seed={u.user_id} label={u.username ?? "?"} />
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold text-ink">{u.username ?? "—"}</div>
+                        <div className="text-sm font-semibold text-ink">{u.username || "Unbekannt"}</div>
                         <div className="font-mono text-[10.5px] text-[#6b6390]">{u.user_id}</div>
                       </div>
                     </div>

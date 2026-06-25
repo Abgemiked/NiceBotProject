@@ -22,6 +22,25 @@ services:
     networks:
       - default
       - npm-web
+
+  # Web-Verwaltungstool (FastAPI + React-SPA). Kein Host-Port-Mapping:
+  # NPM routet nicebot.abgemiked.de intern auf nicebot-admin:8140.
+  nicebot-admin:
+    build: ./admin
+    image: nicebot-admin:latest
+    container_name: nicebot-admin
+    restart: unless-stopped
+    env_file:
+      - ./admin/.env
+    volumes:
+      # Bot-config.json (rw, für spätere Konfig-Verwaltung M2)
+      - ./config:/app/bot_config
+      # Level-/Audit-SQLite (für M3/M5)
+      - ./data:/app/bot_data
+    networks:
+      - default
+      - npm-web
+
 # Kein Host-Port-Mapping: der interne Service-Endpoint (service_api.py,
 # Port 8130) ist nur aus den Docker-Netzen erreichbar — turnier-backend
 # erreicht ihn ueber das gemeinsame npm-web-Netz als http://nicebot:8130.

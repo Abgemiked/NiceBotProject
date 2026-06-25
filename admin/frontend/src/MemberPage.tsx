@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchMembers, type MemberList } from "./api";
+import { Avatar, Icon, INPUT, Pager, roleColor, TABLE_WRAP, TH, toast } from "./ui";
 
 const PAGE_SIZE = 25;
 
@@ -8,110 +9,70 @@ export default function MemberPage() {
   const [search, setSearch] = useState("");
   const [applied, setApplied] = useState("");
   const [page, setPage] = useState(1);
-  const [error, setError] = useState<string | null>(null);
 
   function load() {
     fetchMembers({ search: applied || undefined, page, page_size: PAGE_SIZE })
-      .then((d) => {
-        setData(d);
-        setError(null);
-      })
-      .catch((e) => setError(String(e.message ?? e)));
+      .then(setData).catch((e) => toast("err", String(e.message ?? e)));
   }
-
   useEffect(load, [applied, page]);
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-medium">Mitglieder</h2>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            setPage(1);
-            setApplied(search);
-          }}
-          className="flex gap-2"
-        >
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Name oder User-ID …"
-            className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm"
-          />
-          <button className="rounded-md border border-slate-700 px-3 py-1.5 text-sm hover:bg-slate-800">
-            Suchen
-          </button>
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <form onSubmit={(e) => { e.preventDefault(); setPage(1); setApplied(search); }} className="relative w-[340px] max-w-full">
+          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6f688c]">{Icon.search}</span>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name oder ID suchen…" className={`${INPUT} bg-surface !border-line pl-10`} />
         </form>
+        <span className="font-mono text-xs text-[#857ea6]">{data ? `${data.total} Mitglieder` : "…"}</span>
       </div>
 
-      {error && <div className="rounded-md bg-red-900/40 px-3 py-2 text-sm text-red-300">{error}</div>}
-
-      <div className="overflow-hidden rounded-xl border border-slate-800">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-900/60 text-left text-slate-400">
-            <tr>
-              <th className="px-4 py-2">Name</th>
-              <th className="px-4 py-2">Rollen</th>
+      <div className={TABLE_WRAP}>
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="bg-surface2">
+              <th className={TH}>Mitglied</th>
+              <th className={TH}>Rollen</th>
+              <th className={`${TH} text-right`}>Discord-ID</th>
             </tr>
           </thead>
           <tbody>
-            {data?.items.map((m) => (
-              <tr key={m.id} className="border-t border-slate-800 align-top">
-                <td className="px-4 py-2">
-                  {m.display_name}
-                  <span className="ml-2 font-mono text-xs text-slate-600">{m.id}</span>
-                </td>
-                <td className="px-4 py-2">
-                  <div className="flex flex-wrap gap-1">
-                    {m.roles.map((r) => (
-                      <span
-                        key={r.id}
-                        className="rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-300"
-                      >
-                        {r.name}
-                      </span>
-                    ))}
-                    {m.roles.length === 0 && <span className="text-xs text-slate-600">—</span>}
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {data && data.items.length === 0 && (
-              <tr>
-                <td colSpan={2} className="px-4 py-6 text-center text-slate-500">
-                  Keine Mitglieder.
-                </td>
-              </tr>
-            )}
+            {data?.items.map((m) => {
+              const shown = m.roles.slice(0, 4);
+              const more = m.roles.length - shown.length;
+              return (
+                <tr key={m.id} className="border-t border-[#201a34] align-top hover:bg-hover">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <Avatar seed={m.id} label={m.display_name} />
+                      <div className="min-w-0"><div className="text-sm font-semibold text-ink">{m.display_name}</div><div className="font-mono text-[10.5px] text-[#6b6390]">@{m.name}</div></div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      {shown.map((r) => {
+                        const c = roleColor(r.name);
+                        return (
+                          <span key={r.id} className="inline-flex items-center gap-1.5 rounded-md border px-2 py-[3px] text-xs font-semibold" style={{ background: c + "1e", borderColor: c + "3a", color: c }}>
+                            <span className="h-1.5 w-1.5 rounded-full" style={{ background: c }} />{r.name}
+                          </span>
+                        );
+                      })}
+                      {more > 0 && <span className="rounded-md bg-[#221c38] px-2 py-[3px] text-xs font-semibold text-[#857ea6]">+{more}</span>}
+                      {m.roles.length === 0 && <span className="text-xs text-faint">—</span>}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono text-xs text-faint">{m.id}</td>
+                </tr>
+              );
+            })}
+            {data && data.items.length === 0 && <tr><td colSpan={3} className="px-4 py-12 text-center text-sm text-faint">Keine Mitglieder gefunden.</td></tr>}
           </tbody>
         </table>
       </div>
 
-      <div className="flex items-center justify-between text-sm text-slate-400">
-        <span>{data ? `${data.total} Mitglieder` : "…"}</span>
-        <div className="flex items-center gap-3">
-          <button
-            disabled={page <= 1}
-            onClick={() => setPage(page - 1)}
-            className="rounded-md border border-slate-700 px-3 py-1 disabled:opacity-40"
-          >
-            Zurück
-          </button>
-          <span>
-            Seite {data?.page ?? 1} / {totalPages}
-          </span>
-          <button
-            disabled={page >= totalPages}
-            onClick={() => setPage(page + 1)}
-            className="rounded-md border border-slate-700 px-3 py-1 disabled:opacity-40"
-          >
-            Weiter
-          </button>
-        </div>
-      </div>
+      <Pager page={page} totalPages={totalPages} onPrev={() => setPage(page - 1)} onNext={() => setPage(page + 1)} label={`Seite ${data?.page ?? 1} / ${totalPages}`} />
     </div>
   );
 }

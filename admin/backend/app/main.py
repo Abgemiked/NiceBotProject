@@ -15,7 +15,9 @@ from .config import settings
 # Security-Header für alle Antworten (M8-Härtung).
 _SECURITY_HEADERS = {
     "Content-Security-Policy": (
-        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+        "default-src 'self'; img-src 'self' data:; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
         "script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; "
         "form-action 'self' https://discord.com"
     ),

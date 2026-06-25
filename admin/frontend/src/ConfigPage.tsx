@@ -1,36 +1,24 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  fetchConfig,
-  fetchChannels,
-  fetchRoles,
-  saveConfig,
-  type ConfigField,
-  type ConfigResponse,
-  type DiscordChannel,
-  type DiscordRole,
+  fetchConfig, fetchChannels, fetchRoles, saveConfig,
+  type ConfigField, type ConfigResponse, type DiscordChannel, type DiscordRole,
 } from "./api";
+import { BTN_PRIMARY, INPUT, CARD, Icon, roleColor, toast } from "./ui";
 
-const MASK = "••••••••";
-const GROUP_ORDER = ["Channels", "Filter", "Rollen", "Secrets"];
+const GROUP_ORDER = ["Channels", "Filter", "Rollen"];
 
-function toText(field: ConfigField, value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (field.type === "idlist" || field.type === "hostlist") {
-    return Array.isArray(value) ? value.join(", ") : String(value);
-  }
-  return String(value);
+function toText(f: ConfigField, v: unknown): string {
+  if (v === null || v === undefined) return "";
+  if (f.type === "idlist" || f.type === "hostlist") return Array.isArray(v) ? v.join(", ") : String(v);
+  return String(v);
 }
-
-function fromText(field: ConfigField, text: string): unknown {
-  if (field.type === "idlist" || field.type === "hostlist") {
-    return text
-      .split(/[\s,;/]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
-  return text.trim();
+function fromText(f: ConfigField, t: string): unknown {
+  if (f.type === "idlist" || f.type === "hostlist") return t.split(/[\s,;/]+/).map((s) => s.trim()).filter(Boolean);
+  return t.trim();
 }
-
+function splitIds(v: string): string[] {
+  return v.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
+}
 function channelsForKind(kind: string | undefined, channels: DiscordChannel[]) {
   if (kind === "voice") return channels.filter((c) => c.type.includes("voice"));
   if (kind === "category") return channels.filter((c) => c.type === "category");
@@ -43,21 +31,18 @@ export default function ConfigPage() {
   const [roles, setRoles] = useState<DiscordRole[]>([]);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [tab, setTab] = useState("Channels");
-  const [status, setStatus] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
+  const [openSel, setOpenSel] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
   function load() {
-    fetchConfig()
-      .then((d) => {
-        setData(d);
-        const init: Record<string, string> = {};
-        for (const f of d.fields) init[f.key] = toText(f, d.values[f.key]);
-        setDraft(init);
-      })
-      .catch((e) => setStatus({ kind: "err", msg: String(e.message ?? e) }));
+    fetchConfig().then((d) => {
+      setData(d);
+      const init: Record<string, string> = {};
+      for (const f of d.fields) init[f.key] = toText(f, d.values[f.key]);
+      setDraft(init);
+    }).catch((e) => toast("err", String(e.message ?? e)));
   }
-
   useEffect(() => {
     load();
     fetchChannels().then(setChannels).catch(() => setChannels([]));
@@ -69,273 +54,174 @@ export default function ConfigPage() {
     for (const f of data?.fields ?? []) (g[f.group] ??= []).push(f);
     return g;
   }, [data]);
-
   const tabs = GROUP_ORDER.filter((g) => groups[g]?.length);
 
-  if (!data) {
-    return <p className="text-sm text-slate-400">{status?.msg ?? "Lade Konfiguration …"}</p>;
-  }
+  if (!data) return <p className="text-sm text-muted">Lade Konfiguration …</p>;
 
   async function onSave() {
     if (!data) return;
     setSaving(true);
-    setStatus(null);
     setFieldErrors({});
     const updates: Record<string, unknown> = {};
     for (const f of data.fields) {
       if (!f.editable) continue;
-      const original = toText(f, data.values[f.key]);
-      if (draft[f.key] !== original) updates[f.key] = fromText(f, draft[f.key]);
+      const orig = toText(f, data.values[f.key]);
+      if (draft[f.key] !== orig) updates[f.key] = fromText(f, draft[f.key]);
     }
-    if (Object.keys(updates).length === 0) {
-      setSaving(false);
-      setStatus({ kind: "err", msg: "Keine Änderungen." });
-      return;
-    }
+    if (Object.keys(updates).length === 0) { setSaving(false); toast("err", "Keine Änderungen."); return; }
     const res = await saveConfig(updates);
     setSaving(false);
-    if (res.ok) {
-      setStatus({ kind: "ok", msg: `Gespeichert: ${res.updated?.join(", ")}` });
-      load();
-    } else if (res.fieldErrors) {
-      setFieldErrors(res.fieldErrors);
-      setStatus({ kind: "err", msg: "Bitte markierte Felder korrigieren." });
-    } else {
-      setStatus({ kind: "err", msg: res.error ?? "Speichern fehlgeschlagen." });
-    }
+    if (res.ok) { toast("ok", "Konfiguration gespeichert."); load(); }
+    else if (res.fieldErrors) { setFieldErrors(res.fieldErrors); toast("err", "Bitte markierte Felder korrigieren."); }
+    else toast("err", res.error ?? "Speichern fehlgeschlagen.");
   }
 
-  const activeFields = groups[tab] ?? [];
+  const fields = groups[tab] ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-5" onClick={() => setOpenSel(null)}>
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-medium">Bot-Konfiguration</h2>
-        <button
-          onClick={onSave}
-          disabled={saving}
-          className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-        >
-          {saving ? "Speichert …" : "Speichern"}
+        <div className="flex gap-1.5 border-b border-[#211b38]">
+          {tabs.map((t) => (
+            <button key={t} onClick={(e) => { e.stopPropagation(); setTab(t); setOpenSel(null); }}
+              className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-semibold ${tab === t ? "border-accent text-[#f1ecfb]" : "border-transparent text-[#9a93b4] hover:text-ink"}`}>
+              {t}<span className="font-mono text-[11px] text-[#6b6390]">{groups[t]?.length}</span>
+            </button>
+          ))}
+        </div>
+        <button onClick={(e) => { e.stopPropagation(); onSave(); }} disabled={saving} className={BTN_PRIMARY}>
+          {Icon.check}{saving ? "Speichert …" : "Speichern"}
         </button>
       </div>
 
-      {status && (
-        <div
-          className={`rounded-md px-3 py-2 text-sm ${
-            status.kind === "ok"
-              ? "bg-emerald-900/40 text-emerald-300"
-              : "bg-red-900/40 text-red-300"
-          }`}
-        >
-          {status.msg}
-        </div>
-      )}
-
-      {/* Gruppen-Tabs */}
-      <div className="flex gap-1 border-b border-slate-800">
-        {tabs.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm ${
-              tab === t
-                ? "border-indigo-500 text-slate-100"
-                : "border-transparent text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        {activeFields.map((f) => (
-          <Field
-            key={f.key}
-            field={f}
-            value={draft[f.key] ?? ""}
-            error={fieldErrors[f.key]}
-            restart={data.restart_required_keys.includes(f.key)}
-            canViewSecrets={data.can_view_secrets}
-            channels={channels}
-            roles={roles}
-            onChange={(v) => setDraft({ ...draft, [f.key]: v })}
-          />
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+        {fields.map((f) => (
+          <div key={f.key} className={`${CARD} p-4`} onClick={(e) => e.stopPropagation()}>
+            <div className="mb-[11px] flex items-center justify-between gap-2.5">
+              <span className="text-[13.5px] font-semibold text-[#e7e3f4]">{f.label}</span>
+              <span className="font-mono text-[9.5px] text-[#5a5379]">{f.key}</span>
+            </div>
+            <FieldControl
+              field={f} value={draft[f.key] ?? ""} channels={channels} roles={roles}
+              open={openSel === f.key} onToggle={() => setOpenSel(openSel === f.key ? null : f.key)}
+              onChange={(v) => setDraft({ ...draft, [f.key]: v })}
+            />
+            {f.kind === "hostlist" && !fieldErrors[f.key] && <p className="mt-2 text-[11.5px] text-[#6f688c]">Mehrere durch Komma trennen.</p>}
+            {f.kind === "rolelist" && !fieldErrors[f.key] && <p className="mt-2 text-[11.5px] text-[#6f688c]">Mehrfachauswahl — gespeichert als ID-Liste.</p>}
+            {data.restart_required_keys.includes(f.key) && (
+              <p className="mt-1.5 flex items-center gap-1.5 text-[11.5px] text-warning">{Icon.restart}Wirkt erst nach Bot-Neustart.</p>
+            )}
+            {fieldErrors[f.key] && <p className="mt-1.5 text-[11.5px] text-danger2">{fieldErrors[f.key]}</p>}
+          </div>
         ))}
       </div>
     </div>
   );
 }
 
-function Field({
-  field,
-  value,
-  error,
-  restart,
-  canViewSecrets,
-  channels,
-  roles,
-  onChange,
-}: {
-  field: ConfigField;
-  value: string;
-  error?: string;
-  restart: boolean;
-  canViewSecrets: boolean;
-  channels: DiscordChannel[];
-  roles: DiscordRole[];
-  onChange: (v: string) => void;
+function FieldControl({ field, value, channels, roles, open, onToggle, onChange }: {
+  field: ConfigField; value: string; channels: DiscordChannel[]; roles: DiscordRole[];
+  open: boolean; onToggle: () => void; onChange: (v: string) => void;
 }) {
-  const masked = field.secret && !canViewSecrets;
   const kind = field.kind;
-  const isChannel = kind === "channel" || kind === "voice" || kind === "category";
   const isRole = kind === "role";
-  const isRoleList = kind === "rolelist";
+  const isChannel = kind === "channel" || kind === "voice" || kind === "category";
+  const isMulti = kind === "rolelist";
   const multiline = field.type === "idlist" || field.type === "hostlist";
 
-  return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-      <label className="mb-1.5 flex items-center justify-between">
-        <span className="text-sm font-medium">{field.label}</span>
-        <span className="font-mono text-[10px] text-slate-600">{field.key}</span>
-      </label>
-
-      {masked ? (
-        <input
-          value={MASK}
-          disabled
-          className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm opacity-60"
-        />
-      ) : isChannel && channels.length > 0 ? (
-        <Picker
-          value={value}
-          options={channelsForKind(kind, channels).map((c) => ({ id: c.id, name: "#" + c.name }))}
-          disabled={!field.editable}
-          onChange={onChange}
-        />
-      ) : isRole && roles.length > 0 ? (
-        <Picker
-          value={value}
-          options={roles.map((r) => ({ id: r.id, name: "@" + r.name }))}
-          disabled={!field.editable}
-          onChange={onChange}
-        />
-      ) : isRoleList && roles.length > 0 ? (
-        <MultiPicker
-          value={value}
-          options={roles.map((r) => ({ id: r.id, name: "@" + r.name }))}
-          disabled={!field.editable}
-          onChange={onChange}
-        />
-      ) : multiline ? (
-        <textarea
-          rows={2}
-          value={value}
-          disabled={!field.editable}
-          placeholder={kind === "hostlist" ? "tenor.com, klipy.com, giphy.com" : "123, 456"}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm placeholder:text-slate-600 disabled:opacity-60"
-        />
-      ) : (
-        <input
-          type="text"
-          value={value}
-          disabled={!field.editable}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm disabled:opacity-60"
-        />
-      )}
-
-      {kind === "hostlist" && !error && (
-        <p className="mt-1 text-xs text-slate-500">
-          Mehrere durch Komma, Leerzeichen oder Zeilenumbruch trennen.
-        </p>
-      )}
-      {isRoleList && roles.length > 0 && !error && (
-        <p className="mt-1 text-xs text-slate-500">Mehrfachauswahl möglich.</p>
-      )}
-      {restart && (
-        <p className="mt-1 text-xs text-amber-400">Änderung wirkt erst nach Bot-Neustart.</p>
-      )}
-      {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
-    </div>
-  );
-}
-
-function MultiPicker({
-  value,
-  options,
-  disabled,
-  onChange,
-}: {
-  value: string;
-  options: { id: string; name: string }[];
-  disabled: boolean;
-  onChange: (v: string) => void;
-}) {
-  const selected = new Set(
-    value
-      .split(/[\s,;]+/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-  );
-  function toggle(id: string) {
-    const next = new Set(selected);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    onChange(Array.from(next).join(", "));
+  if ((isChannel && channels.length > 0) || (isRole && roles.length > 0)) {
+    const opts = isRole
+      ? roles.map((r) => ({ id: r.id, name: "@" + r.name, color: roleColor(r.name) }))
+      : channelsForKind(kind, channels).map((c) => ({ id: c.id, name: "#" + c.name, color: "#a24bff" }));
+    const sel = opts.find((o) => o.id === value);
+    return (
+      <div className="relative">
+        <button onClick={onToggle} className="flex w-full items-center justify-between gap-2 rounded-[10px] border border-line2 bg-input px-3 py-2.5 transition hover:border-[#3a3358]">
+          <span className="flex min-w-0 items-center gap-2.5">
+            <span className="h-2 w-2 flex-none rounded-full" style={{ background: sel ? sel.color : "#5d567c" }} />
+            <span className="truncate text-sm font-medium" style={{ color: sel ? "#d8d2ec" : "#6f688c" }}>{sel ? sel.name : "— nicht gesetzt —"}</span>
+          </span>
+          <span className="flex-none text-[#7d76a0]">{Icon.chevron}</span>
+        </button>
+        {open && (
+          <Popover>
+            <Opt color="#5d567c" name="— nicht gesetzt —" selected={!value} onPick={() => { onChange(""); onToggle(); }} />
+            {opts.map((o) => (
+              <Opt key={o.id} color={o.color} name={o.name} selected={o.id === value} onPick={() => { onChange(o.id); onToggle(); }} />
+            ))}
+          </Popover>
+        )}
+      </div>
+    );
   }
-  const unknown = Array.from(selected).filter((id) => !options.some((o) => o.id === id));
+
+  if (isMulti && roles.length > 0) {
+    const selected = new Set(splitIds(value));
+    const toggle = (id: string) => {
+      const next = new Set(selected);
+      next.has(id) ? next.delete(id) : next.add(id);
+      onChange([...next].join(", "));
+    };
+    return (
+      <div className="relative">
+        <div className="flex min-h-[44px] flex-wrap items-center gap-1.5 rounded-[10px] border border-line2 bg-input p-2">
+          {[...selected].map((id) => {
+            const r = roles.find((x) => x.id === id);
+            const c = roleColor(r?.name ?? id);
+            return (
+              <span key={id} className="inline-flex items-center gap-1.5 rounded-lg border py-1 pl-2.5 pr-1.5 text-[12.5px] font-semibold"
+                style={{ background: c + "22", borderColor: c + "44", color: c }}>
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: c }} />{r ? r.name : "ID " + id}
+                <button onClick={() => toggle(id)} className="flex opacity-70 hover:opacity-100" style={{ color: c }}>{Icon.x}</button>
+              </span>
+            );
+          })}
+          <button onClick={onToggle} className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[#3a3358] px-2.5 py-[5px] text-[12.5px] font-semibold text-muted transition hover:border-accent hover:text-accentsoft">{Icon.plus}Rolle</button>
+        </div>
+        {open && (
+          <Popover>
+            {roles.map((r) => {
+              const c = roleColor(r.name);
+              const on = selected.has(r.id);
+              return (
+                <button key={r.id} onClick={() => toggle(r.id)} className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left hover:bg-[#241d3a]">
+                  <span className="flex h-[17px] w-[17px] flex-none items-center justify-center rounded-[5px] border-[1.5px]" style={{ borderColor: on ? "#a24bff" : "#3a3358", background: on ? "#a24bff" : "transparent" }}>
+                    {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>}
+                  </span>
+                  <span className="h-2 w-2 flex-none rounded-full" style={{ background: c }} />
+                  <span className="flex-1 text-[13.5px] text-[#d8d2ec]">@{r.name}</span>
+                </button>
+              );
+            })}
+          </Popover>
+        )}
+      </div>
+    );
+  }
+
+  if (multiline) {
+    return (
+      <textarea rows={2} value={value} onChange={(e) => onChange(e.target.value)}
+        placeholder={kind === "hostlist" ? "tenor.com, klipy.com, giphy.com" : "123456789, 987654321"} className={INPUT} />
+    );
+  }
+  return <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={kind === "keyword" ? "z. B. oof" : ""} className={INPUT} />;
+}
+
+function Popover({ children }: { children: ReactNode }) {
   return (
-    <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border border-slate-700 bg-slate-950 p-2">
-      {options.map((o) => (
-        <label key={o.id} className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={selected.has(o.id)}
-            disabled={disabled}
-            onChange={() => toggle(o.id)}
-          />
-          <span>{o.name}</span>
-        </label>
-      ))}
-      {unknown.map((id) => (
-        <label key={id} className="flex items-center gap-2 text-sm text-slate-500">
-          <input type="checkbox" checked disabled={disabled} onChange={() => toggle(id)} />
-          <span>ID {id} (unbekannt)</span>
-        </label>
-      ))}
+    <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-40 max-h-60 animate-fIn overflow-y-auto rounded-xl border border-[#322a4d] bg-raised p-1.5 shadow-[0_24px_48px_-16px_rgba(0,0,0,.85)]">
+      {children}
     </div>
   );
 }
 
-function Picker({
-  value,
-  options,
-  disabled,
-  onChange,
-}: {
-  value: string;
-  options: { id: string; name: string }[];
-  disabled: boolean;
-  onChange: (v: string) => void;
-}) {
-  const known = options.some((o) => o.id === value);
+function Opt({ color, name, selected, onPick }: { color: string; name: string; selected: boolean; onPick: () => void }) {
   return (
-    <select
-      value={value}
-      disabled={disabled}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm disabled:opacity-60"
-    >
-      <option value="">— nicht gesetzt —</option>
-      {options.map((o) => (
-        <option key={o.id} value={o.id}>
-          {o.name}
-        </option>
-      ))}
-      {value && !known && <option value={value}>ID {value} (unbekannt)</option>}
-    </select>
+    <button onClick={onPick} className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left hover:bg-[#241d3a]">
+      <span className="h-2 w-2 flex-none rounded-full" style={{ background: color }} />
+      <span className="flex-1 truncate text-[13.5px] text-[#d8d2ec]">{name}</span>
+      {selected && <span className="text-accentsoft">{Icon.check}</span>}
+    </button>
   );
 }

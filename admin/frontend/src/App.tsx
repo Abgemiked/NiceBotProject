@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { fetchMe, logout, type Me } from "./api";
 import ConfigPage from "./ConfigPage";
 import LevelPage from "./LevelPage";
+import AuditPage from "./AuditPage";
 
-type View = "config" | "levels";
+type View = "config" | "levels" | "logs";
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null);
@@ -50,6 +51,7 @@ export default function App() {
           <nav className="flex gap-1 text-sm">
             <NavBtn label="Konfiguration" active={view === "config"} onClick={() => setView("config")} />
             <NavBtn label="Level & Ränge" active={view === "levels"} onClick={() => setView("levels")} />
+            <NavBtn label="Logs" active={view === "logs"} onClick={() => setView("logs")} />
           </nav>
         </div>
         <div className="flex items-center gap-4 text-sm">
@@ -66,7 +68,9 @@ export default function App() {
       </header>
 
       <main className="mx-auto max-w-3xl px-6 py-10">
-        {view === "config" ? <ConfigPage /> : <LevelPage canEdit={p.tier === "full_admin"} />}
+        {view === "config" && <ConfigPage />}
+        {view === "levels" && <LevelPage canEdit={p.tier === "full_admin"} />}
+        {view === "logs" && <AuditPage />}
       </main>
     </div>
   );

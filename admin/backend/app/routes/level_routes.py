@@ -6,6 +6,7 @@ PUT  /api/levels/{user_id}  — exp/level setzen (NUR Voll-Admin, live geprüft)
 """
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 
+from ..audit_db import log_admin_override
 from ..authz import current_tier_live
 from ..bot_client import BotApiError
 from ..deps import require_access
@@ -66,6 +67,20 @@ async def put_level(user_id: str, payload: dict = Body(...), user=Depends(requir
     except LevelValidationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
+    before = get_user(user_id)  # alte Werte für das Audit-Log
     if update_user(user_id, level, exp) == 0:
         raise HTTPException(status_code=404, detail="User nicht gefunden")
+
+    # Admin-Override protokollieren (best effort).
+    log_admin_override(
+        actor_id=user.get("discord_id"),
+        actor_name=user.get("username"),
+        target_id=user_id,
+        target_name=(before or {}).get("username"),
+        meta={
+            "scope": "level",
+            "old": {"level": (before or {}).get("level"), "exp": (before or {}).get("exp")},
+            "new": {"level": level, "exp": exp},
+        },
+    )
     return {"user_id": user_id, "level": level, "exp": exp}

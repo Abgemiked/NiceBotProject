@@ -23,6 +23,54 @@ export async function logout(): Promise<void> {
   await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
 }
 
+// --- Audit-Log & Statistiken (M5 + M4) ---
+
+export interface AuditEvent {
+  id: number;
+  ts: string;
+  event_type: string;
+  actor_name: string | null;
+  target_id: string | null;
+  target_name: string | null;
+  channel_id: string | null;
+  content: string | null;
+  meta: unknown;
+}
+
+export interface AuditList {
+  event_types: string[];
+  items: AuditEvent[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export async function fetchAudit(params: {
+  event_type?: string;
+  page?: number;
+  page_size?: number;
+}): Promise<AuditList> {
+  const q = new URLSearchParams();
+  if (params.event_type) q.set("event_type", params.event_type);
+  q.set("page", String(params.page ?? 1));
+  q.set("page_size", String(params.page_size ?? 25));
+  const res = await fetch(`/api/audit?${q.toString()}`, { credentials: "same-origin" });
+  if (!res.ok) throw new Error(`Audit-Log konnte nicht geladen werden (${res.status})`);
+  return res.json();
+}
+
+export interface Stats {
+  member_count: number;
+  members_without_ignored: number;
+  ignored_role_members: number;
+}
+
+export async function fetchStats(): Promise<Stats | null> {
+  const res = await fetch("/api/stats", { credentials: "same-origin" });
+  if (!res.ok) return null; // Bot evtl. nicht erreichbar — Seite bleibt nutzbar
+  return res.json();
+}
+
 // --- Bot-Konfiguration (M2) ---
 
 export interface ConfigField {

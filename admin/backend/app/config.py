@@ -47,6 +47,8 @@ class Settings:
     BOT_CONFIG_PATH = os.environ.get("BOT_CONFIG_PATH", "/app/bot_config/config.json")
     # Gemountete Level-SQLite (docker-compose: ./data:/app/bot_data)
     LEVEL_DB_PATH = os.environ.get("LEVEL_DB_PATH", "/app/bot_data/level_system.db")
+    # Audit-Log-SQLite (vom Bot beschrieben, im selben data-Volume)
+    AUDIT_DB_PATH = os.environ.get("AUDIT_DB_PATH", "/app/bot_data/audit_log.db")
     # Identisch zum TURNIER_SERVICE_TOKEN des Bots (X-Service-Token).
     BOT_SERVICE_TOKEN = os.environ.get("BOT_SERVICE_TOKEN", "")
     GUILD_ID = os.environ.get("GUILD_ID", "")

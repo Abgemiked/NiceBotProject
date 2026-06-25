@@ -36,4 +36,6 @@
 - Empfehlung (Opus, → M5): Audit-Log der Admin-Overrides (wer/wann/alt→neu).
 
 ## Deploy
-- (nach PASS: merge main, build/up nicebot-admin, Health + interner Read-Test gegen Live-DB, KEIN Prod-Write im Test)
+- main 5ca9e02 → /opt/nicebot, build/up nicebot-admin. Frontend-Build sauber.
+- Verifiziert: /api/health=ok; /api/levels ohne Session=401; interner Live-Lesetest: 910 User, Top-3 nach Level gelesen.
+- UI-Edit-Test (FULL_ADMIN) offen → User-Abnahme.

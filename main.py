@@ -39,8 +39,12 @@ from events.temp_channel.voice_temp import on_voice_state_update_handler
 from events.temp_channel.voice_temp import handle_empty_temp_channels
 from events.statistic_channel.statistic import update_statistics
 from service_api import start_service_api
+import audit_log
 
 cfg_json = load_config()
+
+# Audit-Log-Tabelle früh anlegen (idempotent, exception-tolerant).
+audit_log.init_db()
 
 intents = discord.Intents(65419)
 bot = discord.Client(intents=intents)

@@ -113,6 +113,8 @@ import hmac
 import discord
 from aiohttp import web
 
+import audit_log
+
 DEFAULT_PORT = 8130
 
 # Eventmanagement-Rolle auf der NiceCom-Guild (überschreibbar via
@@ -1132,6 +1134,12 @@ def create_service_app(cfg_json, bot):
             return web.json_response({"ok": True, "delivered": False})
         except discord.HTTPException as exc:
             return web.json_response({"error": f"Discord-Fehler: {exc}"}, status=502)
+        audit_log.log_event(
+            "dm_sent",
+            target_id=discord_id,
+            target_name=getattr(member, "name", None),
+            content=message,
+        )
         return web.json_response({"ok": True, "delivered": True})
 
     async def assign_teamleader_role(request):
@@ -1172,8 +1180,26 @@ def create_service_app(cfg_json, bot):
             return web.json_response({"error": f"Discord-Fehler: {exc}"}, status=502)
         return web.json_response({"ok": True, "role_id": str(role.id)})
 
+    async def server_stats(request):
+        """Mitglieder-Statistik (Membercount) fürs Web-Verwaltungstool (M4)."""
+        if not _token_ok(request, cfg_json.get("TURNIER_SERVICE_TOKEN")):
+            return web.json_response({"error": "Ungültiger Service-Token"}, status=401)
+        guild = bot.get_guild(cfg_json.get("GUILD_ID"))
+        if guild is None:
+            return web.json_response({"error": "Guild nicht verfügbar"}, status=503)
+        total = guild.member_count or 0
+        role_id = cfg_json.get("IGNORED_ROLE_ID")
+        role = guild.get_role(role_id) if role_id else None
+        ignored = len(role.members) if role else 0
+        return web.json_response({
+            "member_count": total,
+            "members_without_ignored": total - ignored,
+            "ignored_role_members": ignored,
+        })
+
     app = web.Application()
     app.router.add_get("/internal/members/{discord_id}/roles", member_roles)
+    app.router.add_get("/internal/stats", server_stats)
     app.router.add_post("/internal/tournaments/discord", create_tournament_discord)
     app.router.add_delete("/internal/tournaments/discord", delete_tournament_discord)
     app.router.add_post(

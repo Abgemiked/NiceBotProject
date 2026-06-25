@@ -7,6 +7,9 @@ services:
     environment:
       # SQLite-Leveldatenbank im Volume
       - DB_PATH=/app/data/level_system.db
+      # Audit-Log-SQLite (vom Web-Tool gelesen, gleiches data-Volume) — explizit
+      # gesetzt, damit der Pfad nicht von DB_PATH-Ableitung abhängt.
+      - AUDIT_DB_PATH=/app/data/audit_log.db
       # config.json beschreibbar gemountet (/einstellungen speichert dorthin)
       - CONFIG_PATH=/app/config/config.json
     env_file:

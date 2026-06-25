@@ -1,5 +1,7 @@
 import discord
 
+import audit_log
+
 
 async def handle_message_delete(payload, bot, LOG_CHANNEL_ID, MUSIC_CHANNEL_ID, ALLOWED_ROLE_ID):
     channel = bot.get_channel(payload.channel_id)
@@ -21,6 +23,16 @@ async def handle_message_delete(payload, bot, LOG_CHANNEL_ID, MUSIC_CHANNEL_ID, 
             break
     if not allowed_role_found:
         await log_channel.send(f'Die Nachricht "**{message.content}**" von **{message.author.name}** wurde aus dem Channel **{message.channel.name}** gelöscht.')
+
+    # Persistentes Audit-Log (best effort; bricht den Bot bei Fehler nicht).
+    audit_log.log_event(
+        "message_delete",
+        target_id=message.author.id,
+        target_name=message.author.name,
+        channel_id=channel.id,
+        content=message.content,
+        meta={"team_message": allowed_role_found, "channel_name": message.channel.name},
+    )
 
 
 async def on_raw_message_delete_handler(payload, bot, LOG_CHANNEL_ID, MUSIC_CHANNEL_ID, ALLOWED_ROLE_ID):

@@ -44,3 +44,20 @@ async def fetch_member_roles(discord_id: str):
         list(data.get("role_ids") or []),
         data.get("username"),
     )
+
+
+async def fetch_stats():
+    """Holt die Mitglieder-Statistik (Membercount) von der Bot-API."""
+    url = f"{settings.BOT_API_URL}/internal/stats"
+    headers = {"X-Service-Token": settings.BOT_SERVICE_TOKEN}
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, headers=headers)
+    except httpx.HTTPError as exc:
+        raise BotApiError(f"Bot-API nicht erreichbar: {exc}") from exc
+    if resp.status_code != 200:
+        raise BotApiError(f"Stats-Abruf fehlgeschlagen: HTTP {resp.status_code}")
+    try:
+        return resp.json()
+    except ValueError as exc:
+        raise BotApiError("Bot-API lieferte kein gültiges JSON") from exc

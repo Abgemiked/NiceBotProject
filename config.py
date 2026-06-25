@@ -18,6 +18,17 @@ except ImportError:
 
 CONFIG_PATH = os.environ.get("CONFIG_PATH", "config.json")
 
+# Im GIF-Channel erlaubte Hostnamen (GIF-Provider). Discord liefert GIFs aus
+# seinem Picker über wechselnde Anbieter aus (tenor, klipy, giphy). Fehlt der
+# Key in config.json, gilt dieser Default — so brechen bestehende Deployments
+# nicht und tenor.com bleibt weiterhin erlaubt. Geprüft wird der exakte Host
+# (inkl. Subdomains wie media.tenor.com), nicht ein roher String-Präfix.
+DEFAULT_GIF_ALLOWED_DOMAINS = [
+    "tenor.com",
+    "klipy.com",
+    "giphy.com",
+]
+
 # Alle bekannten Konfig-Schlüssel (siehe config.example.json)
 KNOWN_KEYS = [
     "TOKEN",
@@ -25,6 +36,7 @@ KNOWN_KEYS = [
     "SPAM_CHANNEL_ID",
     "SPAM_KEYWORD",
     "GIF_ID",
+    "GIF_ALLOWED_DOMAINS",
     "LOG_CHANNEL_ID",
     "LEAVE_CHANNEL_ID",
     "MUSIC_CHANNEL_ID",

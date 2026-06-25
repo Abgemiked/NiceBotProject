@@ -12,7 +12,7 @@ Statistics channel      -> shows members without bots
 ```
 Spamchannel     -> deletes everything except a certain word
 
-GIF channel     -> deletes everything except GIFs
+GIF channel     -> deletes everything except GIFs (allowed provider hosts via GIF_ALLOWED_DOMAINS in config.json; default: tenor.com, klipy.com, giphy.com)
 
 Picture channel -> deletes everything except pictures & replies to pictures
 

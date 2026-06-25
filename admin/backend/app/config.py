@@ -45,6 +45,8 @@ class Settings:
     BOT_API_URL = os.environ.get("BOT_API_URL", "http://nicebot:8130")
     # Gemountete Bot-config.json (docker-compose: ./config:/app/bot_config)
     BOT_CONFIG_PATH = os.environ.get("BOT_CONFIG_PATH", "/app/bot_config/config.json")
+    # Gemountete Level-SQLite (docker-compose: ./data:/app/bot_data)
+    LEVEL_DB_PATH = os.environ.get("LEVEL_DB_PATH", "/app/bot_data/level_system.db")
     # Identisch zum TURNIER_SERVICE_TOKEN des Bots (X-Service-Token).
     BOT_SERVICE_TOKEN = os.environ.get("BOT_SERVICE_TOKEN", "")
     GUILD_ID = os.environ.get("GUILD_ID", "")

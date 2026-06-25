@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { fetchMe, logout, type Me } from "./api";
 import ConfigPage from "./ConfigPage";
+import LevelPage from "./LevelPage";
+
+type View = "config" | "levels";
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<View>("config");
 
   useEffect(() => {
     fetchMe()
@@ -41,7 +45,13 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
-        <h1 className="text-lg font-semibold">nicebot — Verwaltung</h1>
+        <div className="flex items-center gap-6">
+          <h1 className="text-lg font-semibold">nicebot — Verwaltung</h1>
+          <nav className="flex gap-1 text-sm">
+            <NavBtn label="Konfiguration" active={view === "config"} onClick={() => setView("config")} />
+            <NavBtn label="Level & Ränge" active={view === "levels"} onClick={() => setView("levels")} />
+          </nav>
+        </div>
         <div className="flex items-center gap-4 text-sm">
           <span className="text-slate-400">
             {me.username} · <span className="text-indigo-400">{tierLabel}</span>
@@ -56,7 +66,7 @@ export default function App() {
       </header>
 
       <main className="mx-auto max-w-3xl px-6 py-10">
-        <ConfigPage />
+        {view === "config" ? <ConfigPage /> : <LevelPage canEdit={p.tier === "full_admin"} />}
       </main>
     </div>
   );
@@ -67,5 +77,26 @@ function Centered({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-950 px-6 text-center text-slate-100">
       {children}
     </div>
+  );
+}
+
+function NavBtn({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-md px-3 py-1 ${
+        active ? "bg-slate-800 text-slate-100" : "text-slate-400 hover:text-slate-200"
+      }`}
+    >
+      {label}
+    </button>
   );
 }

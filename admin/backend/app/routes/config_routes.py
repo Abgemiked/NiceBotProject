@@ -10,7 +10,6 @@ from ..authz import current_tier_live
 from ..bot_config import BotConfigError, read_config, write_config
 from ..config_schema import (
     FIELDS,
-    READONLY_SECRET_KEYS,
     ValidationError,
     apply_updates,
     validate_updates,
@@ -22,12 +21,9 @@ router = APIRouter(prefix="/api", tags=["config"])
 
 
 def _field_meta():
-    """Statische Feld-Metadaten + die schreibgeschützten Secret-Felder fürs UI."""
-    meta = [dict(f, secret=False, editable=True) for f in FIELDS]
-    for key in sorted(READONLY_SECRET_KEYS):
-        meta.append({"key": key, "group": "Secrets", "type": "secret",
-                     "label": key, "secret": True, "editable": False})
-    return meta
+    """Statische Feld-Metadaten. Laufzeit-Secrets (Token etc.) werden NICHT hier,
+    sondern im dedizierten Secrets-Tab (/api/secrets, .env-basiert) verwaltet."""
+    return [dict(f, secret=False, editable=True) for f in FIELDS]
 
 
 @router.get("/config")

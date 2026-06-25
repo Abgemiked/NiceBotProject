@@ -40,6 +40,8 @@ services:
       - ./config:/app/bot_config
       # Level-/Audit-SQLite (für M3/M5)
       - ./data:/app/bot_data
+      # Bot-.env (rw) — Secrets-Verwaltung durch Voll-Admin
+      - ./.env:/app/bot_env/.env
     networks:
       - default
       - npm-web

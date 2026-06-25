@@ -23,6 +23,43 @@ export async function logout(): Promise<void> {
   await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
 }
 
+// --- Laufzeit-Secrets (.env, nur Voll-Admin) ---
+
+export interface SecretEntry {
+  key: string;
+  label: string;
+  value: string;
+  set: boolean;
+}
+
+export async function fetchSecrets(): Promise<SecretEntry[]> {
+  const res = await fetch("/api/secrets", { credentials: "same-origin" });
+  if (!res.ok) throw new Error(`Secrets nicht ladbar (${res.status})`);
+  return (await res.json()).secrets ?? [];
+}
+
+export async function saveSecrets(
+  updates: Record<string, string>
+): Promise<SaveResult & { restartRequired?: boolean }> {
+  const res = await fetch("/api/secrets", {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ updates }),
+  });
+  if (res.ok) {
+    const d = await res.json();
+    return { ok: true, updated: d.updated, restartRequired: d.restart_required };
+  }
+  let detail: unknown = null;
+  try {
+    detail = (await res.json()).detail;
+  } catch {
+    /* kein JSON */
+  }
+  return { ok: false, error: typeof detail === "string" ? detail : `Fehler ${res.status}` };
+}
+
 // --- Discord-Stammdaten für Dropdowns ---
 
 export interface DiscordChannel {

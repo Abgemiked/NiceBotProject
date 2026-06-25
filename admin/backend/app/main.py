@@ -18,6 +18,7 @@ from .routes import (
     discord_routes,
     level_routes,
     me_routes,
+    secrets_routes,
 )
 
 app = FastAPI(title="nicebot-admin", version="0.1.0")
@@ -28,6 +29,7 @@ app.include_router(config_routes.router)
 app.include_router(level_routes.router)
 app.include_router(audit_routes.router)
 app.include_router(discord_routes.router)
+app.include_router(secrets_routes.router)
 
 # Pfad zur gebauten Frontend-SPA (im Docker-Image kopiert; lokal optional).
 FRONTEND_DIST = os.environ.get("FRONTEND_DIST", "/app/frontend_dist")

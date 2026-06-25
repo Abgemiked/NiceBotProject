@@ -49,6 +49,8 @@ class Settings:
     LEVEL_DB_PATH = os.environ.get("LEVEL_DB_PATH", "/app/bot_data/level_system.db")
     # Audit-Log-SQLite (vom Bot beschrieben, im selben data-Volume)
     AUDIT_DB_PATH = os.environ.get("AUDIT_DB_PATH", "/app/bot_data/audit_log.db")
+    # Bot-.env (read-write gemountet) — Verwaltung der Laufzeit-Secrets durch Voll-Admin
+    BOT_ENV_PATH = os.environ.get("BOT_ENV_PATH", "/app/bot_env/.env")
     # Identisch zum TURNIER_SERVICE_TOKEN des Bots (X-Service-Token).
     BOT_SERVICE_TOKEN = os.environ.get("BOT_SERVICE_TOKEN", "")
     GUILD_ID = os.environ.get("GUILD_ID", "")

@@ -11,6 +11,7 @@ import { fetchMe, logout, type Me } from "./api";
 import ConfigPage from "./ConfigPage";
 import LevelPage from "./LevelPage";
 import AuditPage from "./AuditPage";
+import SecretsPage from "./SecretsPage";
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null);
@@ -50,6 +51,10 @@ export default function App() {
           <Route path="konfiguration" element={<ConfigPage />} />
           <Route path="level" element={<LevelPage canEdit={fullAdmin} />} />
           <Route path="logs" element={<AuditPage />} />
+          <Route
+            path="secrets"
+            element={fullAdmin ? <SecretsPage /> : <Navigate to="/konfiguration" replace />}
+          />
           <Route path="*" element={<Navigate to="/konfiguration" replace />} />
         </Route>
       </Routes>
@@ -74,6 +79,7 @@ function Layout({ me }: { me: Me }) {
             <Tab to="/konfiguration" label="Konfiguration" />
             <Tab to="/level" label="Level & Ränge" />
             <Tab to="/logs" label="Logs" />
+            {me.permissions.tier === "full_admin" && <Tab to="/secrets" label="Secrets" />}
           </nav>
         </div>
         <div className="flex items-center gap-4 text-sm">

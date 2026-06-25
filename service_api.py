@@ -1281,8 +1281,10 @@ def create_service_app(cfg_json, bot):
     async def resolve_names(request):
         """Anzeigenamen für eine Liste von Discord-IDs auflösen (fürs Web-Tool).
 
-        Reihenfolge je ID: Live-Member/User aus dem Cache → einmaliger fetch_user
-        (Backfill in die Level-DB, heilt Altbestände) → nicht enthalten.
+        NUR aus dem lokalen Cache (guild member / bekannter User) — KEIN
+        fetch_user, damit die Rangliste schnell lädt (kein blockierender
+        Discord-API-Call pro nicht gecachter ID). Nicht auflösbare IDs fehlen
+        in der Antwort; der Aufrufer fällt auf den gespeicherten Namen zurück.
         Body: {"ids": ["123", …]} → {"names": {"123": "name", …}}
         """
         if not _token_ok(request, cfg_json.get("TURNIER_SERVICE_TOKEN")):
@@ -1296,36 +1298,13 @@ def create_service_app(cfg_json, bot):
             return web.json_response({"error": "ids muss eine Liste sein"}, status=400)
         guild = bot.get_guild(cfg_json.get("GUILD_ID"))
         out = {}
-        backfill_conn = None
         for raw in ids[:200]:
             if not _valid_snowflake(raw):
                 continue
             uid = int(raw)
-            name = None
-            member = guild.get_member(uid) if guild else None
-            if member is None:
-                member = bot.get_user(uid)
+            member = (guild.get_member(uid) if guild else None) or bot.get_user(uid)
             if member is not None:
-                name = member.name
-            else:
-                try:
-                    fetched = await bot.fetch_user(uid)
-                    name = fetched.name
-                    if backfill_conn is None:
-                        import database
-                        backfill_conn = database.get_connection()
-                    backfill_conn.execute(
-                        "UPDATE users SET username = ? WHERE user_id = ?", (name, uid)
-                    )
-                except Exception:
-                    name = None
-            if name:
-                out[str(uid)] = name
-        if backfill_conn is not None:
-            try:
-                backfill_conn.commit()
-            except Exception:
-                pass
+                out[str(uid)] = member.name
         return web.json_response({"names": out})
 
     async def guild_members(request):

@@ -114,6 +114,7 @@ import discord
 from aiohttp import web
 
 import audit_log
+from commands.streamer import streamer_core
 
 DEFAULT_PORT = 8130
 
@@ -1224,11 +1225,98 @@ def create_service_app(cfg_json, bot):
         ]
         return web.json_response({"roles": out})
 
+    async def streamers_list(request):
+        if not _token_ok(request, cfg_json.get("TURNIER_SERVICE_TOKEN")):
+            return web.json_response({"error": "Ungültiger Service-Token"}, status=401)
+        guild = bot.get_guild(cfg_json.get("GUILD_ID"))
+        if guild is None:
+            return web.json_response({"error": "Guild nicht verfügbar"}, status=503)
+        return web.json_response({"streamers": streamer_core.list_streamers(guild)})
+
+    def _valid_streamer_name(name):
+        return isinstance(name, str) and 0 < len(name.strip()) <= 50
+
+    async def streamers_create(request):
+        if not _token_ok(request, cfg_json.get("TURNIER_SERVICE_TOKEN")):
+            return web.json_response({"error": "Ungültiger Service-Token"}, status=401)
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"error": "Ungültiger JSON-Body"}, status=400)
+        name = (body or {}).get("name")
+        if not _valid_streamer_name(name):
+            return web.json_response({"error": "Ungültiger Streamer-Name"}, status=400)
+        guild = bot.get_guild(cfg_json.get("GUILD_ID"))
+        if guild is None:
+            return web.json_response({"error": "Guild nicht verfügbar"}, status=503)
+        if streamer_core.streamer_exists(guild, name):
+            return web.json_response({"error": "Streamer existiert bereits"}, status=409)
+        try:
+            display = await streamer_core.create_streamer(guild, name)
+        except discord.HTTPException as exc:
+            return web.json_response({"error": f"Discord-Fehler: {exc}"}, status=502)
+        return web.json_response({"ok": True, "name": display})
+
+    async def streamers_delete(request):
+        if not _token_ok(request, cfg_json.get("TURNIER_SERVICE_TOKEN")):
+            return web.json_response({"error": "Ungültiger Service-Token"}, status=401)
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"error": "Ungültiger JSON-Body"}, status=400)
+        name = (body or {}).get("name")
+        if not _valid_streamer_name(name):
+            return web.json_response({"error": "Ungültiger Streamer-Name"}, status=400)
+        guild = bot.get_guild(cfg_json.get("GUILD_ID"))
+        if guild is None:
+            return web.json_response({"error": "Guild nicht verfügbar"}, status=503)
+        try:
+            existed = await streamer_core.delete_streamer(guild, name)
+        except discord.HTTPException as exc:
+            return web.json_response({"error": f"Discord-Fehler: {exc}"}, status=502)
+        if not existed:
+            return web.json_response({"error": "Streamer nicht gefunden"}, status=404)
+        return web.json_response({"ok": True})
+
+    async def guild_members(request):
+        """Paginierte Mitgliederliste mit Rollen (M7)."""
+        if not _token_ok(request, cfg_json.get("TURNIER_SERVICE_TOKEN")):
+            return web.json_response({"error": "Ungültiger Service-Token"}, status=401)
+        guild = bot.get_guild(cfg_json.get("GUILD_ID"))
+        if guild is None:
+            return web.json_response({"error": "Guild nicht verfügbar"}, status=503)
+        search = (request.query.get("search") or "").strip().lower()
+        try:
+            page = max(1, int(request.query.get("page", "1")))
+            page_size = min(100, max(1, int(request.query.get("page_size", "25"))))
+        except (TypeError, ValueError):
+            page, page_size = 1, 25
+        members = [m for m in guild.members if not m.bot]
+        if search:
+            members = [m for m in members
+                       if search in m.name.lower() or search in (m.display_name or "").lower()
+                       or search == str(m.id)]
+        members.sort(key=lambda m: (m.display_name or m.name).lower())
+        total = len(members)
+        start = (page - 1) * page_size
+        page_items = members[start:start + page_size]
+        items = [{
+            "id": str(m.id), "name": m.name, "display_name": m.display_name,
+            "roles": [{"id": str(r.id), "name": r.name}
+                      for r in m.roles if r != guild.default_role],
+        } for m in page_items]
+        return web.json_response({"items": items, "total": total,
+                                  "page": page, "page_size": page_size})
+
     app = web.Application()
     app.router.add_get("/internal/members/{discord_id}/roles", member_roles)
     app.router.add_get("/internal/stats", server_stats)
     app.router.add_get("/internal/channels", guild_channels)
     app.router.add_get("/internal/roles", guild_roles)
+    app.router.add_get("/internal/streamers", streamers_list)
+    app.router.add_post("/internal/streamers", streamers_create)
+    app.router.add_delete("/internal/streamers", streamers_delete)
+    app.router.add_get("/internal/guild-members", guild_members)
     app.router.add_post("/internal/tournaments/discord", create_tournament_discord)
     app.router.add_delete("/internal/tournaments/discord", delete_tournament_discord)
     app.router.add_post(

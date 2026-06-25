@@ -12,6 +12,8 @@ import ConfigPage from "./ConfigPage";
 import LevelPage from "./LevelPage";
 import AuditPage from "./AuditPage";
 import SecretsPage from "./SecretsPage";
+import StreamerPage from "./StreamerPage";
+import MemberPage from "./MemberPage";
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null);
@@ -50,6 +52,8 @@ export default function App() {
           <Route index element={<Navigate to="/konfiguration" replace />} />
           <Route path="konfiguration" element={<ConfigPage />} />
           <Route path="level" element={<LevelPage canEdit={fullAdmin} />} />
+          <Route path="streamer" element={<StreamerPage canManage={fullAdmin} />} />
+          <Route path="mitglieder" element={<MemberPage />} />
           <Route path="logs" element={<AuditPage />} />
           <Route
             path="secrets"
@@ -78,6 +82,8 @@ function Layout({ me }: { me: Me }) {
           <nav className="flex gap-1 text-sm">
             <Tab to="/konfiguration" label="Konfiguration" />
             <Tab to="/level" label="Level & Ränge" />
+            <Tab to="/streamer" label="Streamer" />
+            <Tab to="/mitglieder" label="Mitglieder" />
             <Tab to="/logs" label="Logs" />
             {me.permissions.tier === "full_admin" && <Tab to="/secrets" label="Secrets" />}
           </nav>

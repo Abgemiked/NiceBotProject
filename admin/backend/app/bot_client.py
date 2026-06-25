@@ -4,6 +4,8 @@ Spricht GET {BOT_API_URL}/internal/members/{discord_id}/roles mit dem
 X-Service-Token an (siehe service_api.py:291). Antwortform:
     {"is_member": bool, "role_ids": [str], "username": str}
 """
+from urllib.parse import quote
+
 import httpx
 
 from .config import settings
@@ -76,3 +78,42 @@ async def fetch_channels():
 async def fetch_roles():
     """Holt die Guild-Rollen (id, name) von der Bot-API."""
     return (await _get_json("/internal/roles")).get("roles", [])
+
+
+async def _request(method, path, json_body=None):
+    """Authentifizierter Request → (status_code:int, data:dict). Wirft BotApiError
+    nur bei Netzwerkfehler/ungültigem JSON, NICHT bei HTTP-Fehlerstatus (damit
+    der Aufrufer 404/409 differenziert behandeln kann)."""
+    url = f"{settings.BOT_API_URL}{path}"
+    headers = {"X-Service-Token": settings.BOT_SERVICE_TOKEN}
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.request(method, url, headers=headers, json=json_body)
+    except httpx.HTTPError as exc:
+        raise BotApiError(f"Bot-API nicht erreichbar: {exc}") from exc
+    try:
+        data = resp.json()
+    except ValueError:
+        data = {}
+    return resp.status_code, data
+
+
+async def fetch_streamers():
+    return (await _get_json("/internal/streamers")).get("streamers", [])
+
+
+async def create_streamer(name):
+    return await _request("POST", "/internal/streamers", {"name": name})
+
+
+async def delete_streamer(name):
+    return await _request("DELETE", "/internal/streamers", {"name": name})
+
+
+async def fetch_members(search=None, page=1, page_size=25):
+    q = []
+    if search:
+        q.append(f"search={quote(str(search))}")
+    q.append(f"page={int(page)}")
+    q.append(f"page_size={int(page_size)}")
+    return await _get_json("/internal/guild-members?" + "&".join(q))

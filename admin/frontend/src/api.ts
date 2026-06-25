@@ -23,6 +23,75 @@ export async function logout(): Promise<void> {
   await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
 }
 
+// --- Streamer-Verwaltung (M6) ---
+
+export interface Streamer {
+  name: string;
+  category_id: string;
+  channels: number;
+}
+
+export async function fetchStreamers(): Promise<Streamer[]> {
+  const res = await fetch("/api/streamers", { credentials: "same-origin" });
+  if (!res.ok) throw new Error(`Streamer nicht ladbar (${res.status})`);
+  return (await res.json()).streamers ?? [];
+}
+
+export async function createStreamer(name: string): Promise<SaveResult> {
+  return streamerWrite("POST", name);
+}
+
+export async function deleteStreamer(name: string): Promise<SaveResult> {
+  return streamerWrite("DELETE", name);
+}
+
+async function streamerWrite(method: string, name: string): Promise<SaveResult> {
+  const res = await fetch("/api/streamers", {
+    method,
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (res.ok) return { ok: true };
+  let detail: unknown = null;
+  try {
+    detail = (await res.json()).detail;
+  } catch {
+    /* kein JSON */
+  }
+  return { ok: false, error: typeof detail === "string" ? detail : `Fehler ${res.status}` };
+}
+
+// --- Member-Übersicht (M7) ---
+
+export interface Member {
+  id: string;
+  name: string;
+  display_name: string;
+  roles: { id: string; name: string }[];
+}
+
+export interface MemberList {
+  items: Member[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export async function fetchMembers(params: {
+  search?: string;
+  page?: number;
+  page_size?: number;
+}): Promise<MemberList> {
+  const q = new URLSearchParams();
+  if (params.search) q.set("search", params.search);
+  q.set("page", String(params.page ?? 1));
+  q.set("page_size", String(params.page_size ?? 25));
+  const res = await fetch(`/api/members?${q.toString()}`, { credentials: "same-origin" });
+  if (!res.ok) throw new Error(`Mitglieder nicht ladbar (${res.status})`);
+  return res.json();
+}
+
 // --- Laufzeit-Secrets (.env, nur Voll-Admin) ---
 
 export interface SecretEntry {

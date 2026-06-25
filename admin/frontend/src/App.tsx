@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchMe, logout, type Me } from "./api";
+import ConfigPage from "./ConfigPage";
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null);
@@ -54,20 +55,8 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-6 py-10 space-y-4">
-        <Card title="Einstellungen" enabled={p.edit_settings}>
-          Bot-Konfiguration verwalten (folgt in M2).
-        </Card>
-        {/* Secret-Bereich nur für Voll-Admin sichtbar */}
-        {p.view_secrets ? (
-          <Card title="Secrets / Keys" enabled={p.edit_secrets}>
-            Bot-Token & Service-Token (sichtbar, da Voll-Admin).
-          </Card>
-        ) : (
-          <Card title="Secrets / Keys" enabled={false} muted>
-            Für deine Rolle ausgeblendet.
-          </Card>
-        )}
+      <main className="mx-auto max-w-3xl px-6 py-10">
+        <ConfigPage />
       </main>
     </div>
   );
@@ -78,33 +67,5 @@ function Centered({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-950 px-6 text-center text-slate-100">
       {children}
     </div>
-  );
-}
-
-function Card({
-  title,
-  enabled,
-  muted,
-  children,
-}: {
-  title: string;
-  enabled: boolean;
-  muted?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <section
-      className={`rounded-xl border border-slate-800 p-5 ${
-        muted ? "opacity-50" : ""
-      }`}
-    >
-      <div className="mb-1 flex items-center justify-between">
-        <h2 className="font-medium">{title}</h2>
-        <span className="text-xs text-slate-500">
-          {enabled ? "bearbeitbar" : "nur Anzeige"}
-        </span>
-      </div>
-      <p className="text-sm text-slate-400">{children}</p>
-    </section>
   );
 }

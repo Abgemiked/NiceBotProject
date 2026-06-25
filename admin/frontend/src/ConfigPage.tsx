@@ -17,15 +17,39 @@ function toText(field: ConfigField, value: unknown): string {
   return String(value);
 }
 
-/** Parst die Editierform zurück in den API-Wert. */
+/** Parst die Editierform zurück in den API-Wert. Listen tolerant trennen:
+ *  Komma, Semikolon, Leerzeichen, Zeilenumbruch und Slash. */
 function fromText(field: ConfigField, text: string): unknown {
   if (field.type === "idlist" || field.type === "hostlist") {
     return text
-      .split(/[,\n]/)
+      .split(/[\s,;/]+/)
       .map((s) => s.trim())
       .filter(Boolean);
   }
   return text.trim();
+}
+
+/** Platzhalter-Beispiel je Feldtyp. */
+function placeholderFor(field: ConfigField): string {
+  switch (field.type) {
+    case "hostlist":
+      return "tenor.com, klipy.com, giphy.com";
+    case "idlist":
+      return "123456789012345678, 234567890123456789";
+    case "id":
+      return "123456789012345678";
+    default:
+      return "";
+  }
+}
+
+/** Hinweistext für Listenfelder. */
+function hintFor(field: ConfigField): string | null {
+  if (field.type === "hostlist")
+    return "Vollständige Hostnamen, getrennt durch Komma, Leerzeichen oder Zeilenumbruch.";
+  if (field.type === "idlist")
+    return "Discord-IDs, getrennt durch Komma, Leerzeichen oder Zeilenumbruch.";
+  return null;
 }
 
 export default function ConfigPage() {
@@ -134,17 +158,22 @@ export default function ConfigPage() {
                       rows={2}
                       value={value}
                       disabled={!f.editable}
+                      placeholder={placeholderFor(f)}
                       onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
-                      className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm disabled:opacity-60"
+                      className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm placeholder:text-slate-600 disabled:opacity-60"
                     />
                   ) : (
                     <input
                       type="text"
                       value={value}
                       disabled={!f.editable}
+                      placeholder={placeholderFor(f)}
                       onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
-                      className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm disabled:opacity-60"
+                      className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm placeholder:text-slate-600 disabled:opacity-60"
                     />
+                  )}
+                  {hintFor(f) && !fieldErrors[f.key] && (
+                    <p className="mt-1 text-xs text-slate-500">{hintFor(f)}</p>
                   )}
                   {data.restart_required_keys.includes(f.key) && (
                     <p className="mt-1 text-xs text-amber-400">

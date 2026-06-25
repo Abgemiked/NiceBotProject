@@ -36,4 +36,6 @@
 - Kein expliziter Body-Größenlimit (Auth-geschützt; ggf. NPM client_max_body_size).
 
 ## Deploy
-- (nach PASS: merge main, build/up nicebot-admin, Health + GET /api/config-Read-Test)
+- main 733df9a → /opt/nicebot, docker compose build/up nicebot-admin. Frontend-Build sauber (vite ✓).
+- Verifiziert: /api/health=ok; /api/config ohne Session=401; interner Live-Lesetest: config.json gelesen (17 Felder),
+  TOKEN für DC-Mod maskiert. UI-Edit-Test offen → User-Abnahme.

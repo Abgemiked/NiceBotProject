@@ -26,12 +26,12 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 _STATE_COOKIE = "nicebot_admin_oauth_state"
 
 
-def _cookie_kwargs(max_age):
+def _cookie_kwargs(max_age, samesite="lax"):
     return {
         "max_age": max_age,
         "httponly": True,
         "secure": settings.COOKIE_SECURE,
-        "samesite": "lax",
+        "samesite": samesite,
         "path": "/",
     }
 
@@ -104,7 +104,9 @@ async def callback(request: Request, code: str = "", state: str = ""):
     resp.set_cookie(
         settings.SESSION_COOKIE,
         issue_session(discord_id, username, tier.value),
-        **_cookie_kwargs(settings.SESSION_MAX_AGE),
+        # Session-Cookie strikt (CSRF-Härtung); der kurzlebige State-Cookie bleibt
+        # lax, damit er den Cross-Site-Redirect von Discord zurück übersteht.
+        **_cookie_kwargs(settings.SESSION_MAX_AGE, samesite="strict"),
     )
     resp.delete_cookie(_STATE_COOKIE, path="/")
     return resp

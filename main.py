@@ -52,11 +52,12 @@ tree = app_commands.CommandTree(bot)
 
 _statistics_loop_started = False
 _service_api_started = False
+_audit_purge_started = False
 
 
 @bot.event
 async def on_ready():
-    global _statistics_loop_started, _service_api_started
+    global _statistics_loop_started, _service_api_started, _audit_purge_started
     # Guild-scoped Sync: registriert die Slash-Commands SOFORT + zuverlässig im
     # NiceCom-Guild (globaler Sync ist träge/cache-behaftet, Clients zeigen sonst
     # veraltete Listen → nur /verknüpfen sichtbar). Globaler Sync zusätzlich für DMs.
@@ -75,6 +76,16 @@ async def on_ready():
         _service_api_started = True
         # Interner Endpoint fürs Turnier-Backend (Guild-Rollen/Mitglieds-Check)
         asyncio.create_task(start_service_api(cfg_json, bot))
+    if not _audit_purge_started:
+        _audit_purge_started = True
+        asyncio.create_task(audit_purge_loop())
+
+
+async def audit_purge_loop():
+    # DSGVO-Speicherbegrenzung: alte Audit-Einträge täglich löschen.
+    while True:
+        audit_log.purge_old()
+        await asyncio.sleep(86400)
 
 
 async def update_statistics_loop():

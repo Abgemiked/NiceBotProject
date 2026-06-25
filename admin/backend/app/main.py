@@ -6,11 +6,26 @@ intern im Docker-Netz (kein Host-Port-Mapping).
 """
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
+
+# Security-Header für alle Antworten (M8-Härtung).
+_SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+        "script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; "
+        "form-action 'self' https://discord.com"
+    ),
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
+}
+# Methoden, die einen CSRF-Origin-Check brauchen.
+_STATE_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
 from .routes import (
     audit_routes,
     auth_routes,
@@ -24,6 +39,25 @@ from .routes import (
 )
 
 app = FastAPI(title="nicebot-admin", version="0.1.0")
+
+
+@app.middleware("http")
+async def security_and_csrf(request: Request, call_next):
+    # CSRF: zustandsändernde /api-Requests müssen vom eigenen Origin kommen.
+    if request.method in _STATE_METHODS and request.url.path.startswith("/api/"):
+        allowed = settings.public_origin()
+        origin = request.headers.get("origin")
+        referer = request.headers.get("referer") or ""
+        ok = bool(allowed) and (
+            origin == allowed or referer == allowed or referer.startswith(allowed + "/")
+        )
+        if not ok:
+            return JSONResponse({"detail": "CSRF: ungültige Herkunft"}, status_code=403)
+    response = await call_next(request)
+    for k, v in _SECURITY_HEADERS.items():
+        response.headers.setdefault(k, v)
+    return response
+
 
 app.include_router(auth_routes.router)
 app.include_router(me_routes.router)

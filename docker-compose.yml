@@ -10,6 +10,9 @@ services:
       # Audit-Log-SQLite (vom Web-Tool gelesen, gleiches data-Volume) — explizit
       # gesetzt, damit der Pfad nicht von DB_PATH-Ableitung abhängt.
       - AUDIT_DB_PATH=/app/data/audit_log.db
+      # DSGVO: Aufbewahrungsfrist (Tage) + ob Nachrichteninhalte gespeichert werden.
+      - AUDIT_RETENTION_DAYS=60
+      - AUDIT_STORE_CONTENT=1
       # config.json beschreibbar gemountet (/einstellungen speichert dorthin)
       - CONFIG_PATH=/app/config/config.json
     env_file:

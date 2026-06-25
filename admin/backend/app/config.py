@@ -33,6 +33,14 @@ class Settings:
     )
     DISCORD_API_BASE = "https://discord.com/api"
 
+    @classmethod
+    def public_origin(cls):
+        """Erlaubte Origin (Schema+Host) — abgeleitet aus der Redirect-URI.
+        Basis für den CSRF-Origin/Referer-Check."""
+        from urllib.parse import urlparse
+        p = urlparse(cls.OAUTH_REDIRECT_URI)
+        return f"{p.scheme}://{p.netloc}" if p.scheme and p.netloc else ""
+
     # --- Session ---
     # Signaturschlüssel für Session- und State-Cookies. PFLICHT in Produktion.
     SESSION_SECRET = os.environ.get("SESSION_SECRET", "")

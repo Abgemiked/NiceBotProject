@@ -103,7 +103,7 @@ export interface ConfigField {
   key: string;
   group: string;
   type: "id" | "idlist" | "string" | "hostlist" | "secret";
-  kind?: "channel" | "voice" | "category" | "role" | "keyword" | "hostlist" | "idlist";
+  kind?: "channel" | "voice" | "category" | "role" | "rolelist" | "keyword" | "hostlist" | "idlist";
   label: string;
   secret: boolean;
   editable: boolean;

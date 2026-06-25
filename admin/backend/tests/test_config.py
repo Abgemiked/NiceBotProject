@@ -97,6 +97,26 @@ def test_token_not_in_editable_whitelist():
     assert "TURNIER_SERVICE_TOKEN" not in EDITABLE_KEYS
 
 
+def test_admin_roles_accept_multiple():
+    clean, errors = validate_updates(
+        {"ALLOWED_ROLE_IDS": ["669879940296081420", 1130018862990098463]},
+        can_write=True,
+    )
+    assert errors == {}
+    assert clean["ALLOWED_ROLE_IDS"] == [669879940296081420, 1130018862990098463]
+
+
+def test_dc_mod_role_is_editable_list():
+    assert "DC_MOD_ROLE_IDS" in EDITABLE_KEYS
+    clean, errors = validate_updates({"DC_MOD_ROLE_IDS": ["1078399961496039515"]}, can_write=True)
+    assert errors == {} and clean["DC_MOD_ROLE_IDS"] == [1078399961496039515]
+
+
+def test_admin_roles_reject_non_list():
+    _, errors = validate_updates({"ALLOWED_ROLE_IDS": "669879940296081420"}, can_write=True)
+    assert "ALLOWED_ROLE_IDS" in errors
+
+
 # --- Merge erhält Fremd-Keys ---
 
 def test_apply_updates_preserves_foreign_keys():

@@ -191,6 +191,7 @@ function Field({
   const kind = field.kind;
   const isChannel = kind === "channel" || kind === "voice" || kind === "category";
   const isRole = kind === "role";
+  const isRoleList = kind === "rolelist";
   const multiline = field.type === "idlist" || field.type === "hostlist";
 
   return (
@@ -220,6 +221,13 @@ function Field({
           disabled={!field.editable}
           onChange={onChange}
         />
+      ) : isRoleList && roles.length > 0 ? (
+        <MultiPicker
+          value={value}
+          options={roles.map((r) => ({ id: r.id, name: "@" + r.name }))}
+          disabled={!field.editable}
+          onChange={onChange}
+        />
       ) : multiline ? (
         <textarea
           rows={2}
@@ -244,10 +252,60 @@ function Field({
           Mehrere durch Komma, Leerzeichen oder Zeilenumbruch trennen.
         </p>
       )}
+      {isRoleList && roles.length > 0 && !error && (
+        <p className="mt-1 text-xs text-slate-500">Mehrfachauswahl möglich.</p>
+      )}
       {restart && (
         <p className="mt-1 text-xs text-amber-400">Änderung wirkt erst nach Bot-Neustart.</p>
       )}
       {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
+    </div>
+  );
+}
+
+function MultiPicker({
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  value: string;
+  options: { id: string; name: string }[];
+  disabled: boolean;
+  onChange: (v: string) => void;
+}) {
+  const selected = new Set(
+    value
+      .split(/[\s,;]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
+  function toggle(id: string) {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onChange(Array.from(next).join(", "));
+  }
+  const unknown = Array.from(selected).filter((id) => !options.some((o) => o.id === id));
+  return (
+    <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border border-slate-700 bg-slate-950 p-2">
+      {options.map((o) => (
+        <label key={o.id} className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={selected.has(o.id)}
+            disabled={disabled}
+            onChange={() => toggle(o.id)}
+          />
+          <span>{o.name}</span>
+        </label>
+      ))}
+      {unknown.map((id) => (
+        <label key={id} className="flex items-center gap-2 text-sm text-slate-500">
+          <input type="checkbox" checked disabled={disabled} onChange={() => toggle(id)} />
+          <span>ID {id} (unbekannt)</span>
+        </label>
+      ))}
     </div>
   );
 }

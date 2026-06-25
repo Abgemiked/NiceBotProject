@@ -33,7 +33,8 @@ FIELDS = [
     {"key": "SPAM_KEYWORD", "group": "Filter", "type": "string", "kind": "keyword", "label": "Spam-Keyword"},
     {"key": "GIF_ALLOWED_DOMAINS", "group": "Filter", "type": "hostlist", "kind": "hostlist", "label": "Erlaubte GIF-Domains"},
     {"key": "BLOCKED_CHANNEL_IDS", "group": "Filter", "type": "idlist", "kind": "idlist", "label": "Blockierte Channels"},
-    {"key": "ALLOWED_ROLE_IDS", "group": "Rollen", "type": "id", "kind": "role", "label": "Admin-Rolle"},
+    {"key": "ALLOWED_ROLE_IDS", "group": "Rollen", "type": "idlist", "kind": "rolelist", "label": "Admin-Rollen"},
+    {"key": "DC_MOD_ROLE_IDS", "group": "Rollen", "type": "idlist", "kind": "rolelist", "label": "DC-Mod-Rolle(n)"},
     {"key": "IGNORED_ROLE_ID", "group": "Rollen", "type": "id", "kind": "role", "label": "Ignorierte Rolle (Statistik)"},
 ]
 

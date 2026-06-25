@@ -3,6 +3,22 @@ import discord
 import audit_log
 
 
+def _as_id_set(value):
+    """Normalisiert ALLOWED_ROLE_IDS zu einem set[int] — akzeptiert eine Liste
+    (neu) ebenso wie eine einzelne ID (abwärtskompatibel zur alten Config)."""
+    if value is None:
+        return set()
+    if not isinstance(value, (list, tuple, set)):
+        value = [value]
+    out = set()
+    for v in value:
+        try:
+            out.add(int(v))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 async def handle_message_delete(payload, bot, LOG_CHANNEL_ID, MUSIC_CHANNEL_ID, ALLOWED_ROLE_ID):
     channel = bot.get_channel(payload.channel_id)
     if channel is None:
@@ -13,9 +29,10 @@ async def handle_message_delete(payload, bot, LOG_CHANNEL_ID, MUSIC_CHANNEL_ID, 
     log_channel = bot.get_channel(LOG_CHANNEL_ID)
     if log_channel is None:
         return
+    allowed_role_ids = _as_id_set(ALLOWED_ROLE_ID)
     allowed_role_found = False
     for role in message.author.roles:
-        if role.id == ALLOWED_ROLE_ID:
+        if role.id in allowed_role_ids:
             if channel.id == MUSIC_CHANNEL_ID:
                 return
             allowed_role_found = True

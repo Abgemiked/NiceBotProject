@@ -28,7 +28,14 @@ async def handler(interaction: discord.Interaction, allgemein_channel: discord.T
     if temp_category is not None:
         data['TEMP_CATEGORY_ID'] = temp_category.id
     if adminrole is not None:
-        data['ALLOWED_ROLE_IDS'] = adminrole.id
+        # ALLOWED_ROLE_IDS ist eine Liste (Web-Tool kann mehrere setzen). Der
+        # Slash-Command ergänzt die gewählte Rolle, statt die Liste zu ersetzen.
+        existing = data.get('ALLOWED_ROLE_IDS')
+        if not isinstance(existing, list):
+            existing = [existing] if existing is not None else []
+        if adminrole.id not in existing:
+            existing.append(adminrole.id)
+        data['ALLOWED_ROLE_IDS'] = existing
     if botrole is not None:
         data['IGNORED_ROLE_ID'] = botrole.id
 
